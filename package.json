@@ -1,0 +1,28 @@
+{
+  "name": "docalaizer",
+  "private": true,
+  "packageManager": "pnpm@10.6.5",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "eslint .",
+    "db:generate": "pnpm --filter @docalaizer/db db:generate",
+    "db:migrate": "pnpm --filter @docalaizer/db db:migrate",
+    "db:seed": "pnpm --filter @docalaizer/db db:seed",
+    "db:studio": "pnpm --filter @docalaizer/db db:studio"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.24.0",
+    "@types/node": "^22.14.0",
+    "eslint": "^9.24.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.29.0",
+    "vitest": "^3.1.1"
+  }
+}

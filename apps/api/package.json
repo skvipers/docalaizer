@@ -1,0 +1,24 @@
+{
+  "name": "@docalaizer/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@docalaizer/core": "workspace:*",
+    "@docalaizer/db": "workspace:*",
+    "@docalaizer/shared": "workspace:*",
+    "@hono/node-server": "^1.14.0",
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "hono": "^4.7.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.3"
+  }
+}
