@@ -1,1 +1,237 @@
 @import "tailwindcss";
+
+:root {
+  --bg-canvas: #faf9f7;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f3f1ed;
+  --bg-hover: #eae6df;
+  --border-default: #e5e1d8;
+  --border-strong: #cfc9bc;
+  --text-primary: #1c1b19;
+  --text-secondary: #54504a;
+  --text-muted: #6b655d;
+
+  --accent-primary: #0f766e;
+  --accent-primary-hover: #115e59;
+  --accent-primary-fg: #ffffff;
+  --accent-primary-soft: #ccfbf1;
+
+  --sem-human-text: #b45309;
+  --sem-human-bg: #fef3c7;
+  --sem-human-border: #f59e0b;
+
+  --sem-ai-text: #1d4ed8;
+  --sem-ai-bg: #dbeafe;
+  --sem-ai-border: #60a5fa;
+
+  --sem-clean-text: #15803d;
+  --sem-clean-bg: #dcfce7;
+  --sem-clean-border: #4ade80;
+
+  --sem-danger-text: #b91c1c;
+  --sem-danger-bg: #fee2e2;
+  --sem-danger-border: #f87171;
+}
+
+[data-theme="dark"] {
+  --bg-canvas: #111214;
+  --bg-surface: #181a1e;
+  --bg-subtle: #141619;
+  --bg-hover: #22252b;
+  --border-default: #2a2d34;
+  --border-strong: #3a3f4a;
+  --text-primary: #f2f1ee;
+  --text-secondary: #a8a69e;
+  --text-muted: #8e8c84;
+
+  --accent-primary: #2dd4bf;
+  --accent-primary-hover: #5eead4;
+  --accent-primary-fg: #0a1f1d;
+  --accent-primary-soft: #132e2c;
+
+  --sem-human-text: #fbbf24;
+  --sem-human-bg: #2e2312;
+  --sem-human-border: #92400e;
+
+  --sem-ai-text: #60a5fa;
+  --sem-ai-bg: #132238;
+  --sem-ai-border: #1e40af;
+
+  --sem-clean-text: #4ade80;
+  --sem-clean-bg: #122b1e;
+  --sem-clean-border: #166534;
+
+  --sem-danger-text: #f87171;
+  --sem-danger-bg: #331719;
+  --sem-danger-border: #991b1b;
+}
+
+html,
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family:
+    var(--font-sans, "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+}
+
+code,
+pre,
+.font-mono {
+  font-family:
+    var(--font-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+}
+
+/* Editorial Markdown Prose */
+.doc-prose {
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--text-primary);
+}
+
+.doc-prose h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.75rem;
+}
+
+.doc-prose h2 {
+  font-size: 1.3rem;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  margin-top: 0.25rem;
+  margin-bottom: 0.6rem;
+}
+
+.doc-prose h3 {
+  font-size: 1.075rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.doc-prose p {
+  margin-bottom: 0.75rem;
+}
+
+.doc-prose p:last-child {
+  margin-bottom: 0;
+}
+
+.doc-prose ul,
+.doc-prose ol {
+  padding-left: 1.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.doc-prose ul {
+  list-style-type: disc;
+}
+
+.doc-prose ol {
+  list-style-type: decimal;
+}
+
+.doc-prose li {
+  margin-bottom: 0.25rem;
+}
+
+.doc-prose code {
+  font-size: 0.875em;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+}
+
+.doc-prose pre {
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+}
+
+.doc-prose pre code {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.doc-prose blockquote {
+  border-left: 3px solid var(--accent-primary);
+  padding-left: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0.75rem 0;
+}
+
+.doc-prose a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.doc-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.doc-prose th,
+.doc-prose td {
+  border: 1px solid var(--border-default);
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+}
+
+.doc-prose th {
+  background-color: var(--bg-subtle);
+  font-weight: 600;
+}
+
+/* Interactive surface primitives */
+.btn-primary {
+  background-color: var(--accent-primary);
+  color: var(--accent-primary-fg);
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--accent-primary-hover);
+}
+
+.btn-secondary {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.nav-item {
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.nav-item:hover {
+  background-color: var(--bg-hover);
+}
+
+/* Focus visible hygiene */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}

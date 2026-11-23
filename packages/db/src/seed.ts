@@ -28,7 +28,7 @@ function hashBlockContent(content: unknown): string {
 async function seed() {
   const databaseUrl =
     process.env.DATABASE_URL ??
-    'postgresql://docalaizer:docalaizer_dev@localhost:5432/docalaizer';
+    'postgresql://docalaizer:docalaizer_dev@localhost:5439/docalaizer';
   const { db, pool } = createDb(databaseUrl);
 
   try {

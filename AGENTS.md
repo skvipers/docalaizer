@@ -8,6 +8,10 @@
 - [docs/API_AND_MCP_SPEC.md](docs/API_AND_MCP_SPEC.md) — контракты MCP-инструментов, формат `annotated_markdown` и REST API.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — поэтапный план разработки.
 
+Для работы с веб-интерфейсом (`apps/web`) используйте проектные скилы:
+- `.agents/skills/docalaizer-ui-designer/SKILL.md` — дизайн-система, цветовая палитра (Light/Dark + семантика Human vs AI) и паттерны экранов.
+- `.agents/skills/docalaizer-ui-reviewer/SKILL.md` — чеклист и формат отчёта для ревью готового UI.
+
 ---
 
 ## 1. Жёсткие доменные инварианты (нельзя нарушать)

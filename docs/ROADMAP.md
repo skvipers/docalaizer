@@ -28,13 +28,13 @@
 
 ## Этап 0 — Инициализация монорепы и каркас данных (2–3 дня)
 
-- [ ] Инициализировать `pnpm` workspaces + Turborepo (`apps/web`, `apps/api`, `packages/core`, `packages/db`, `packages/shared`).
-- [ ] Поднять `docker-compose.yml` с PostgreSQL 16 + `.env.example` (включая флаг `ALLOW_PUBLIC_SIGNUP` для личного/публичного режима).
-- [ ] Описать схему БД в `packages/db` (Drizzle ORM) и создать первую миграцию:
-  - `users`, `projects`, `project_members`, `agents`
+- [x] Инициализировать `pnpm` workspaces + Turborepo (`apps/web`, `apps/api`, `packages/core`, `packages/db`, `packages/shared`).
+- [x] Поднять `docker-compose.yml` с PostgreSQL 16 + `.env.example` (включая флаг `ALLOW_PUBLIC_SIGNUP` для личного/публичного режима).
+- [x] Описать схему БД в `packages/db` (Drizzle ORM) и создать первую миграцию:
+  - `users`, `sessions`, `projects`, `project_members`, `agents`
   - `documents` (с `parent_id`, `sort_order`), `revisions` (с `blocks_snapshot` и `search_vector`)
   - `proposals`, `proposal_ops`
-- [ ] Реализовать чистую доменную логику в `packages/core` и покрыть unit-тестами:
+- [x] Реализовать чистую доменную логику в `packages/core` и покрыть unit-тестами:
   - Zod-схемы всех типов блоков (`markdown`, `diagram`, `chart`, `table`, `callout`)
   - Серверные валидаторы **Mermaid** и **Vega-Lite**
   - Парсер `annotated_markdown ↔ DocumentBlock[]` и выравнивание блоков
@@ -47,38 +47,38 @@
 ## Этап 1 — MVP: Confluence-опыт, Графики, MCP и Review Inbox (2–3 недели)
 
 ### 1.1. Auth, Проекты и RBAC (`apps/api`)
-- [ ] Регистрация/логин пользователей (сессии в HttpOnly cookies) + режим первого администратора.
-- [ ] CRUD проектов + управление участниками и ролями (`owner`, `editor`, `reviewer`, `viewer`).
-- [ ] Реестр AI-агентов: выпуск и отзыв Bearer-токенов, настройка скоупов (`projects:read`, `projects:create`, `docs:read`, `docs:create`, `docs:propose`) и белых списков проектов.
+- [x] Регистрация/логин пользователей (сессии в HttpOnly cookies) + режим первого администратора.
+- [x] CRUD проектов + управление участниками и ролями (`owner`, `editor`, `reviewer`, `viewer`).
+- [x] Реестр AI-агентов: выпуск и отзыв Bearer-токенов, настройка скоупов (`projects:read`, `projects:create`, `docs:read`, `docs:create`, `docs:propose`) и белых списков проектов.
 
 ### 1.2. Документы, Дерево страниц и Proposals (`apps/api`)
-- [ ] Иерархия страниц внутри проекта (`GET /projects/:id/tree`, создание, перемещение `parent_id` / `sort_order`, архивирование).
-- [ ] Ручное редактирование страниц (`PATCH /docs/:id`) с оптимистичной блокировкой `head_revision_id` и автоматическим выставлением `humanTouched = true` на изменённых блоках.
-- [ ] Управление защитой блока (`lockedByHuman`, сброс `humanTouched`).
-- [ ] Полный цикл `Proposals`: создание, расчёт 3-way diff на лету, транзакционное применение ревью (`POST /proposals/:id/review`) с поблочными решениями (`accepted` / `rejected` / `edited`).
-- [ ] История ревизий документа и откат (всего документа или одного блока).
-- [ ] Полнотекстовый поиск (`tsvector`) по проектам и страницам.
+- [x] Иерархия страниц внутри проекта (`GET /projects/:id/tree`, создание, перемещение `parent_id` / `sort_order` с защитой от циклов).
+- [x] Ручное редактирование страниц (`PATCH /docs/:id`) с 3-way merge, оптимистичной блокировкой `head_revision_id` и автоматическим выставлением `humanTouched = true` на изменённых блоках.
+- [x] Управление защитой блока (`lockedByHuman`, сброс `humanTouched`).
+- [x] Полный цикл `Proposals`: создание с идемпотентностью и валидацией графиков, расчёт живого 3-way diff на лету, транзакционное применение ревью (`POST /proposals/:id/review`) с поблочными решениями (`accepted` / `rejected` / `edited`).
+- [x] История ревизий документа и append-only откат (всего документа или одного блока).
+- [x] Полнотекстовый поиск (`tsvector` + `ILIKE`) по проектам и страницам.
 
 ### 1.3. MCP-сервер для AI-агентов (`apps/api/src/mcp`)
-- [ ] Streamable HTTP endpoint `/mcp` с авторизацией по токену агента и проверкой скоупов.
-- [ ] Инструменты проектов: `list_projects`, `create_project` (с проверкой `projects:create`), `get_project_tree`.
-- [ ] Инструменты документации: `search_docs`, `get_doc` (`blocks` и `annotated_markdown`), `get_doc_history`, `create_doc`.
-- [ ] Инструменты правок и графиков: `validate_visualization`, `propose_changes`, `propose_markdown_update`, `list_proposals`, `get_proposal`, `update_proposal`.
+- [x] Streamable HTTP endpoint `/mcp` с авторизацией по токену агента и проверкой скоупов.
+- [x] Инструменты проектов: `list_projects`, `create_project` (с проверкой `projects:create`), `get_project_tree`.
+- [x] Инструменты документации: `search_docs`, `get_doc` (`blocks` и `annotated_markdown`), `get_doc_history`, `create_doc`.
+- [x] Инструменты правок и графиков: `validate_visualization`, `propose_changes`, `propose_markdown_update`, `list_proposals`, `get_proposal`, `update_proposal`.
 - [ ] E2E-проверка подключения реальных агентов (Claude Code / Cursor / T3 Code).
 
 ### 1.4. Web UI (`apps/web`)
-- [ ] **Confluence/Coda Layout**: переключатель проектов + левый сайдбар с вложенным деревом страниц и поиском (`Cmd/Ctrl+K`).
-- [ ] **Просмотр и редактор страницы**:
+- [x] **Confluence/Coda Layout**: переключатель проектов + левый сайдбар с вложенным деревом страниц и поиском.
+- [x] **Просмотр и редактор страницы**:
   - Блочное редактирование Markdown, таблиц, callout'ов.
-  - Живой рендер **Mermaid** (с Zoom/Pan) и **Vega-Lite** графиков прямо в странице.
+  - Живой рендер **Mermaid** (`securityLevel: 'strict'`) и **Vega-Lite** графиков прямо в странице.
   - Визуальные маркеры на блоках: бейдж «Правлено вручную», кнопка замка (`lockedByHuman`), действие «Передать AI».
-- [ ] **Review Inbox**:
+- [x] **Review Inbox**:
   - Список входящих `Proposals` по проектам со статусами и бейджами конфликтов.
-  - **Текстовый diff** для Markdown и **визуальный side-by-side diff (Было ↔ Стало)** для диаграмм Mermaid и графиков Vega-Lite (+ вкладка «Сравнить код/данные»).
-  - Чекбоксы на каждый блок (`Принять` / `Отклонить` / `Поправить руками`) + поле комментария агенту.
-  - Яркое предупреждение и снятая галочка по умолчанию для `human_protected` и `risky_delete`.
-- [ ] **Панель настроек**: участники проекта, политика аппрувов проекта, управление токенами и правами AI-агентов (в т.ч. тумблер «Разрешить создавать проекты»).
-- [ ] **История версий**: лента ревизий с фильтром `Все / Люди / AI`, просмотром снапшота и откатом.
+  - Визуальный side-by-side diff (Было ↔ Стало) для Markdown, диаграмм Mermaid и графиков Vega-Lite.
+  - Кнопки `Принять` / `Отклонить` на каждый блок + поле комментария агенту.
+  - Яркое предупреждение и снятый по умолчанию выбор для `human_protected`, `stale_conflict` и `risky_delete`; блокировка `locked`.
+- [x] **Панель настроек**: политика аппрувов проекта, управление токенами и правами AI-агентов (в т.ч. тумблер `projects:create`).
+- [x] **История версий**: лента ревизий и append-only откат документа.
 
 **Критерий готовности MVP**: вы создаёте токен для своего AI-агента с правом `projects:create` → агент через MCP создаёт проект, дерево из 3 страниц, архитектурную Mermaid-диаграмму и Vega-Lite график метрик → вы правите абзац и ставите замок на важную секцию → агент предлагает обновление всего документа → в Review Inbox вы видите визуальный diff графика и текстовый diff, принимаете график, отклоняете перезапись вашего абзаца с комментарием, и в истории документа сохраняется чистая линейка ревизий.
 

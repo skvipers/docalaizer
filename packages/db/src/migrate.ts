@@ -26,7 +26,7 @@ const isMainModule =
 if (isMainModule) {
   const databaseUrl =
     process.env.DATABASE_URL ??
-    'postgresql://docalaizer:docalaizer_dev@localhost:5432/docalaizer';
+    'postgresql://docalaizer:docalaizer_dev@localhost:5439/docalaizer';
   runMigrations(databaseUrl)
     .then(() => {
       console.log('Database migrations applied successfully.');
