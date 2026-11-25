@@ -2,74 +2,85 @@
 
 # Docalaizer
 
-**Confluence / Coda для эпохи AI-агентов** — сервис документации, структурных диаграмм (Mermaid) и графиков данных (Vega-Lite), где AI-агенты работают через MCP и REST API, но **никогда не перезаписывают ручные правки без явного аппрува**.
+*Read this in other languages: [Русский](README.ru.md)*
 
-## Быстрый старт
+**Documentation for the AI-agent era** — a self-hosted documentation, Mermaid diagram, and Vega-Lite chart platform where AI agents collaborate via **MCP** and **REST API**, but **never overwrite human edits without explicit approval**.
 
-### 1. Docker Compose (рекомендуется для self-hosted)
+## Key Features
+
+- **Human-edit protection**: blocks touched (`humanTouched`) or locked (`lockedByHuman`) by a human can never be modified or deleted by AI agents without explicit UI approval — enforced at the server domain level, not by prompts.
+- **Single append-only history + Proposals**: immutable revisions, block-level 3-way merge, conflict detection (`human_protected`, `locked`, `stale_conflict`, `risky_delete`), and cherry-pick Review Inbox.
+- **Native visualizations**: server-validated **Mermaid** diagrams (`securityLevel: 'strict'`) and declarative **Vega-Lite** charts with fullscreen/zoom viewer.
+- **MCP Streamable HTTP (`/mcp`) & REST API (`/api/v1/*`)**: scoped, SHA-256-hashed AI agent tokens with per-project access control and opt-in `projects:create`.
+- **Optional Passkey auth via LocuGard v0.1.0**: WebAuthn login alongside standard email/password authentication.
+- **Bilingual Web UI**: built-in **English (`en`)** and **Russian (`ru`)** localization with instant switching and Light/Dark themes.
+
+## Quick Start
+
+### 1. Docker Compose (recommended for self-hosted)
 
 ```bash
 cp .env.example .env
-# Задайте надёжные пароли и URL в .env
+# Set strong passwords and URLs in .env
 docker compose up -d --build
 ```
 
-После запуска:
+Once running:
 - Web UI: `http://localhost:3000`
 - API & MCP: `http://localhost:3001` (`/health`, `/api/v1/*`, `/mcp`)
 
-### 2. Локальный запуск (Node.js 20+, pnpm 10+)
+### 2. Local Setup (Node.js 20+, pnpm 10+)
 
 ```bash
-# Поднять только PostgreSQL
+# Start PostgreSQL only
 docker compose up -d postgres
 
-# Установить зависимости, применить миграции и собрать проект
+# Install dependencies, build, and run migrations
 pnpm install
 pnpm build
 pnpm db:migrate
 
-# (Опционально) Заполнить демо-данными
-# В production обязательно задайте SEED_ADMIN_PASSWORD
+# (Optional) Seed demo data
+# In production, SEED_ADMIN_PASSWORD is required
 pnpm db:seed
 
-# Запуск в production-режиме
+# Run in production mode
 pnpm start:api
 pnpm start:web
 
-# Или в режиме разработки
+# Or run in development mode
 pnpm dev
 ```
 
-Первый зарегистрированный пользователь через `/api/v1/auth/register` (или форму входа) автоматически получает роль `admin`. Публичная регистрация выключена по умолчанию (`ALLOW_PUBLIC_SIGNUP=false`).
+The first registered user via `/api/v1/auth/register` (or the sign-in screen) automatically receives the `admin` role. Public signup is disabled by default (`ALLOW_PUBLIC_SIGNUP=false`).
 
-## Архитектурная документация
+## Architecture Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — общая архитектура системы, модель проектов и дерева страниц, схема БД (PostgreSQL), RBAC и права AI-агентов (`projects:create` и др.), движок диаграмм (Mermaid) и графиков (Vega-Lite).
-- [docs/VERSIONING_AND_APPROVAL.md](docs/VERSIONING_AND_APPROVAL.md) — модель версионирования (`Single Timeline + Proposals + Block Ownership`), блочный 3-way merge, политики аппрува и защита ручных правок.
-- [docs/API_AND_MCP_SPEC.md](docs/API_AND_MCP_SPEC.md) — контракты MCP-инструментов, формат аннотированного Markdown и спецификация REST API.
-- [docs/ROADMAP.md](docs/ROADMAP.md) — поэтапный план реализации (Этапы 0 → 3).
-- [AGENTS.md](AGENTS.md) — правила, доменные инварианты и соглашения для AI-агентов, работающих над кодовой базой.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system architecture, projects & page tree, PostgreSQL schema, RBAC & AI agent scopes, Mermaid/Vega-Lite rendering.
+- [docs/VERSIONING_AND_APPROVAL.md](docs/VERSIONING_AND_APPROVAL.md) — `Single Timeline + Proposals + Block Ownership`, block-level 3-way merge, and approval policies.
+- [docs/API_AND_MCP_SPEC.md](docs/API_AND_MCP_SPEC.md) — MCP tools catalog, `annotated_markdown` format, and REST API specification.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — development roadmap.
+- [AGENTS.md](AGENTS.md) — domain invariants and guidelines for AI coding agents working in this repository.
 
-## Вход через LocuGard v0.1.0
+## Passkey Sign-In with LocuGard v0.1.0
 
-Docalaizer поддерживает необязательный вход по WebAuthn/passkey через [LocuGard](https://github.com/skvipers/locugard/tree/v0.1.0), сохраняя обычный вход по email и паролю.
+Docalaizer supports optional WebAuthn/passkey sign-in via [LocuGard](https://github.com/skvipers/locugard/tree/v0.1.0) while keeping email/password sign-in available.
 
-1. Разверните LocuGard по его [integration guide](https://github.com/skvipers/locugard/blob/v0.1.0/docs/INTEGRATION.md) и создайте первого владельца только через локальный CLI.
-2. В `AuthService` LocuGard задайте `expected_origin` ровно равным origin веб-приложения Docalaizer, например `https://docalaizer.home.arpa:3000`. `rp_id` должен быть hostname этого приложения или его родительским доменом. WebAuthn не будет работать по HTTP или при другом origin.
-3. Настройте API Docalaizer:
-   - `LOCUGARD_URL=https://locugard.home.arpa:8443` — HTTPS-адрес HTTP API LocuGard;
-   - `LOCUGARD_ORIGIN=https://docalaizer.home.arpa:3000` — тот же origin, что и в `expected_origin`;
-   - при использовании собственного CA задайте `NODE_EXTRA_CA_CERTS` с путём к корневому сертификату или запускайте Node.js 22+ с `NODE_OPTIONS=--use-system-ca`, не отключая проверку TLS.
-4. Перезапустите API. На экране входа появится кнопка «Войти с passkey через LocuGard».
+1. Deploy LocuGard following its [integration guide](https://github.com/skvipers/locugard/blob/v0.1.0/docs/INTEGRATION.md) and bootstrap the first owner via local CLI.
+2. In LocuGard `AuthService`, set `expected_origin` to match the exact origin of the Docalaizer Web UI (e.g. `https://docalaizer.home.arpa:3000`), with `rp_id` set to its hostname or parent domain. WebAuthn requires HTTPS and an exact origin match.
+3. Configure the Docalaizer API:
+   - `LOCUGARD_URL=https://locugard.home.arpa:8443` — HTTPS URL of the LocuGard HTTP API;
+   - `LOCUGARD_ORIGIN=https://docalaizer.home.arpa:3000` — the same origin as `expected_origin`;
+   - if using a private CA, set `NODE_EXTRA_CA_CERTS` to the root CA certificate path or run Node.js 22+ with `NODE_OPTIONS=--use-system-ca` (never disable TLS verification).
+4. Restart the API. A "Sign in with passkey via LocuGard" button will appear on the login screen.
 
-Аккаунт LocuGard привязывается по `account_id` к локальному пользователю `<account_id>@locugard.invalid` с глобальной ролью `member`; владелец LocuGard автоматически администратором Docalaizer не становится. Upstream-сессия проверяется при каждом авторизованном запросе, поэтому её отзыв блокирует доступ. Токены LocuGard и CSRF хранятся только в Secure HttpOnly-cookie и не попадают в `localStorage`.
+Each LocuGard account is mapped by `account_id` to `<account_id>@locugard.invalid` with the global `member` role (external owners are never auto-promoted to `admin`). The upstream session is re-verified on every authenticated request, so revoking it immediately blocks access. LocuGard session and CSRF tokens are stored exclusively in Secure HttpOnly cookies.
 
-## Лицензия
+## License
 
-Проект распространяется по модели **Source-Available / Fair Source** (аналог *PolyForm Small Business*):
+Docalaizer is distributed under a **Source-Available / Fair Source** model (similar to *PolyForm Small Business*):
 
-- **Бесплатно** для личного, учебного, некоммерческого использования, open-source/некоммерческих организаций и небольших стартапов (до 20 сотрудников и до $1M годовой выручки).
-- **Для более крупных компаний** — ожидается поддержка проекта (спонсорство/донейшены) или коммерческая лицензия.
+- **Free** for personal, educational, non-commercial use, open-source/non-profit organizations, and small startups (< 20 employees and < $1M annual revenue).
+- **Larger companies** are expected to support the project via sponsorship/donations or obtain a commercial license.
 
-Подробные условия см. в [LICENSE](LICENSE).
+See [LICENSE](LICENSE) for full terms.
