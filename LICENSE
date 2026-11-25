@@ -1,0 +1,36 @@
+Docalaizer Source-Available & Small Business License (v1.0)
+Copyright (c) 2026 skvipers
+
+This software is provided under a Source-Available / Fair-Source model
+(similar to the PolyForm Small Business model).
+
+1. Permitted Free Use
+   You are granted a free, non-exclusive, worldwide license to use, copy,
+   modify, and self-host this software, provided that your use falls into
+   one of the following categories:
+   (a) Personal, educational, research, or non-commercial use;
+   (b) Open-source projects and non-profit organizations;
+   (c) Small businesses and startups with fewer than 20 employees AND less
+       than $1,000,000 USD in annual gross revenue (or equivalent).
+
+2. Commercial Use by Larger Companies
+   Organizations exceeding the thresholds in Section 1(c) are expected to
+   support the project through recurring sponsorship, donations, or a
+   commercial license agreement with the copyright holder.
+   Contact: mr.skvipers@proton.me
+
+3. Restrictions
+   - You may not offer this software as a hosted SaaS or managed service
+     to third parties that directly competes with Docalaizer without prior
+     written permission from the copyright holder.
+   - You must retain the copyright notice and this license text in all
+     copies or substantial portions of the software.
+
+4. Disclaimer of Warranty & Limitation of Liability
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+   IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+   CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+   TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
