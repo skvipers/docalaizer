@@ -91,6 +91,9 @@ export function serializeBlocksToAnnotatedMarkdown(blocks: readonly DocumentBloc
         }
       } else if (block.type === 'chart') {
         attrs.push(`engine="${block.content.engine}"`);
+        if (block.content.data !== undefined && block.content.spec.data === undefined) {
+          attrs.push('data="separate"');
+        }
         if (block.content.caption) {
           attrs.push(`caption="${escapeAttr(block.content.caption)}"`);
         }
@@ -176,9 +179,24 @@ function parseAnnotatedBody(
       parsedSpec = {};
     }
 
+    let separateData: ChartPayload['data'];
+    if (attrs.data === 'separate' && parsedSpec.data !== undefined) {
+      const { data, ...specWithoutData } = parsedSpec;
+      if (
+        data !== null &&
+        typeof data === 'object' &&
+        !Array.isArray(data) &&
+        Array.isArray((data as Record<string, unknown>).values)
+      ) {
+        separateData = (data as Record<string, unknown>).values as Array<Record<string, unknown>>;
+        parsedSpec = specWithoutData;
+      }
+    }
+
     const content: ChartPayload = {
       engine: 'vega-lite',
       spec: parsedSpec,
+      ...(separateData ? { data: separateData } : {}),
       ...(attrs.caption ? { caption: attrs.caption } : {}),
     };
 

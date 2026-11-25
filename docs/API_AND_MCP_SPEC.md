@@ -175,6 +175,9 @@ flowchart LR
 
 ### Auth & Users
 - `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
+- `GET /auth/providers` — доступные провайдеры входа
+- `POST /auth/locugard/login/options` — получить WebAuthn challenge через настроенный LocuGard v0.1.0
+- `POST /auth/locugard/login/verify` — проверить passkey, привязать `account_id` и создать локальную сессию; upstream-сессия LocuGard затем проверяется на каждом запросе
 
 ### Projects & Members
 - `GET /projects`, `POST /projects`, `GET /projects/:projectId`, `PATCH /projects/:projectId`, `DELETE /projects/:projectId`

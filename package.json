@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "start:api": "pnpm --filter @docalaizer/api start",
+    "start:web": "pnpm --filter @docalaizer/web start",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "lint": "eslint .",
@@ -19,6 +21,7 @@
   "devDependencies": {
     "@eslint/js": "^9.24.0",
     "@types/node": "^22.14.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.24.0",
     "turbo": "^2.5.0",
     "typescript": "^5.8.3",

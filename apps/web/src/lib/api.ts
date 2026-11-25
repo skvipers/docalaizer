@@ -36,7 +36,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
 
   const text = await res.text();
-  const data = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  let data: Record<string, unknown> = {};
+  if (text) {
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      if (!res.ok) {
+        throw new ApiClientError(res.status, 'HTTP_ERROR', text.slice(0, 300));
+      }
+    }
+  }
 
   if (!res.ok) {
     const errObj = (data.error ?? {}) as {
@@ -156,6 +165,7 @@ export interface ProposalDetailOpDto {
 export interface ProposalDetailDto {
   proposal: ProposalInboxItemDto['proposal'];
   document: DocumentTreeItemDto;
+  userRole?: ProjectRole;
   ops: ProposalDetailOpDto[];
   summary: {
     total_ops: number;
@@ -202,6 +212,18 @@ export const api = {
   getApiBaseUrl: () => API_BASE,
 
   me: () => request<{ user: AuthUser }>('/api/v1/auth/me'),
+  getAuthProviders: () =>
+    request<{ providers: { locugard: { enabled: boolean } } }>('/api/v1/auth/providers'),
+  getLocugardLoginOptions: () =>
+    request<{ challenge_id: string; options: Record<string, unknown> }>(
+      '/api/v1/auth/locugard/login/options',
+      { method: 'POST' },
+    ),
+  verifyLocugardLogin: (body: { challengeId: string; credential: Record<string, unknown> }) =>
+    request<{ user: AuthUser }>('/api/v1/auth/locugard/login/verify', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   login: (body: { email: string; password: string }) =>
     request<{ user: AuthUser }>('/api/v1/auth/login', {
       method: 'POST',
@@ -285,6 +307,7 @@ export const api = {
       expectedHeadRevisionId: string;
       proposedBlocks: ProposalBlockPayload[];
       title?: string;
+      icon?: string | null;
       summary?: string;
     },
   ) =>

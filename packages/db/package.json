@@ -4,15 +4,26 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./src/schema/index.ts",
+      "import": "./dist/schema/index.js",
+      "default": "./dist/schema/index.js"
+    }
   },
   "scripts": {
+    "build": "esbuild src/index.ts src/schema/index.ts src/migrate.ts src/seed.ts --bundle --format=esm --platform=node --packages=external --outdir=dist --outbase=src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
+    "db:migrate:prod": "node dist/migrate.js",
     "db:seed": "tsx src/seed.ts",
+    "db:seed:prod": "node dist/seed.js",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

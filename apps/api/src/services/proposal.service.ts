@@ -73,8 +73,16 @@ export function summarizeClassifiedOps(
 }
 
 function validateProposalOpsVisualizations(ops: readonly ProposalOpInput[]): void {
+  const insertedIds = new Set<string>();
   for (let i = 0; i < ops.length; i++) {
     const op = ops[i]!;
+    if (op.opType === 'insert' && op.newBlockPayload.id) {
+      const id = op.newBlockPayload.id;
+      if (insertedIds.has(id)) {
+        throw new AppError(400, 'DUPLICATE_BLOCK_ID', `Duplicate inserted block ID "${id}".`);
+      }
+      insertedIds.add(id);
+    }
     if (op.opType === 'insert' || op.opType === 'update') {
       const validation = validateBlockPayload(op.newBlockPayload);
       if (!validation.valid) {
@@ -167,6 +175,17 @@ export async function createDocumentAsAgent(
     throw new AppError(404, 'NOT_FOUND', 'Project not found.');
   }
 
+  if (params.parentId) {
+    const [parentDoc] = await db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(eq(documents.id, params.parentId), eq(documents.projectId, params.projectId)))
+      .limit(1);
+    if (!parentDoc) {
+      throw new AppError(404, 'NOT_FOUND', 'Parent document not found in this project.');
+    }
+  }
+
   const normalizedBlocks: ProposalBlockPayload[] = params.blocks.map((payload) => ({
     ...payload,
     id: payload.id ?? generateBlockId(),
@@ -177,6 +196,7 @@ export async function createDocumentAsAgent(
     afterBlockId: idx === 0 ? null : (normalizedBlocks[idx - 1]?.id ?? null),
     newBlockPayload: payload,
   }));
+  validateProposalOpsVisualizations(ops);
 
   const classified = classifyProposalOps(ops, [], []);
   const policyEval = evaluateProposalPolicy({
@@ -385,6 +405,14 @@ export async function createProposalAsAgent(
       for (const row of existingOps) {
         summary[row.conflictState]++;
       }
+      const [appliedRevision] = await db
+        .select()
+        .from(revisions)
+        .where(eq(revisions.proposalId, existing.id))
+        .limit(1);
+      if (appliedRevision) {
+        return { status: 'applied', revision: appliedRevision, summary };
+      }
       return {
         status: 'pending',
         proposal: existing,
@@ -398,6 +426,25 @@ export async function createProposalAsAgent(
 
   // Server-side validation of all Mermaid / Vega-Lite payloads BEFORE creating Proposal
   validateProposalOpsVisualizations(params.ops);
+
+  if (params.metadataChanges?.parentId) {
+    if (params.metadataChanges.parentId === doc.id) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'A document cannot be its own parent.');
+    }
+    const [parentDoc] = await db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.id, params.metadataChanges.parentId),
+          eq(documents.projectId, doc.projectId),
+        ),
+      )
+      .limit(1);
+    if (!parentDoc) {
+      throw new AppError(404, 'NOT_FOUND', 'Target parent document not found in this project.');
+    }
+  }
 
   const [project] = await db
     .select()
@@ -450,7 +497,9 @@ export async function createProposalAsAgent(
 
   // Auto-apply ONLY when policy permits AND every single op is clean (zero humanTouched/locked)
   if (policyEval.shouldAutoApply && headRev) {
-    const applied = await db.transaction(async (tx) => {
+    let applied: Revision;
+    try {
+      applied = await db.transaction(async (tx) => {
       const [currentDoc] = await tx
         .select()
         .from(documents)
@@ -474,6 +523,45 @@ export async function createProposalAsAgent(
         agentId: params.agent.id,
       });
 
+      const [autoProposal] = await tx
+        .insert(proposals)
+        .values({
+          projectId: doc.projectId,
+          documentId: doc.id,
+          baseRevisionId: baseRev.id,
+          agentId: params.agent.id,
+          idempotencyKey: params.idempotencyKey ?? null,
+          title: params.title.trim(),
+          rationale: params.rationale ?? null,
+          status: 'approved',
+          reviewedAt: new Date(),
+        })
+        .returning();
+      if (!autoProposal) {
+        throw new AppError(500, 'INTERNAL_ERROR', 'Failed to record auto-applied proposal.');
+      }
+      if (classified.length > 0) {
+        await tx.insert(proposalOps).values(
+          classified.map((item, idx) => ({
+            proposalId: autoProposal.id,
+            opOrder: idx,
+            opType: item.op.opType,
+            targetBlockId: item.op.opType === 'insert' ? null : item.op.targetBlockId,
+            afterBlockId:
+              item.op.opType === 'insert' || item.op.opType === 'move'
+                ? item.op.afterBlockId
+                : null,
+            expectedHash: item.op.opType === 'insert' ? null : (item.op.expectedHash ?? null),
+            newBlockPayload:
+              item.op.opType === 'insert' || item.op.opType === 'update'
+                ? item.op.newBlockPayload
+                : null,
+            conflictState: item.conflictState,
+            decision: 'accepted' as const,
+          })),
+        );
+      }
+
       const [nextRev] = await tx
         .insert(revisions)
         .values({
@@ -482,6 +570,7 @@ export async function createProposalAsAgent(
           revisionNumber: headRev.revisionNumber + 1,
           authorType: 'ai',
           authorAgentId: params.agent.id,
+          proposalId: autoProposal.id,
           summary: params.title,
           blocksSnapshot: mergeResult.nextBlocks,
           searchVector: buildSearchVectorSql(currentDoc.title, mergeResult.nextBlocks),
@@ -507,7 +596,36 @@ export async function createProposalAsAgent(
       }
 
       return nextRev;
-    });
+      });
+    } catch (err) {
+      if (isPgUniqueViolation(err)) {
+        if (params.idempotencyKey) {
+          const [existing] = await db
+            .select()
+            .from(proposals)
+            .where(
+              and(
+                eq(proposals.agentId, params.agent.id),
+                eq(proposals.documentId, doc.id),
+                eq(proposals.idempotencyKey, params.idempotencyKey),
+              ),
+            )
+            .limit(1);
+          const [existingRevision] = existing
+            ? await db.select().from(revisions).where(eq(revisions.proposalId, existing.id)).limit(1)
+            : [];
+          if (existingRevision) {
+            return { status: 'applied', revision: existingRevision, summary };
+          }
+        }
+        throw new AppError(
+          409,
+          ERROR_CODES.HEAD_REVISION_CONFLICT,
+          'Document head changed concurrently during auto-apply; please retry.',
+        );
+      }
+      throw err;
+    }
 
     return { status: 'applied', revision: applied, summary };
   }
@@ -613,6 +731,7 @@ export async function getProposalWithLiveDiff(
 ): Promise<{
   proposal: Proposal;
   document: Document;
+  userRole: 'owner' | 'editor' | 'reviewer' | 'viewer';
   ops: Array<{
     row: ProposalOp;
     liveConflictState: ConflictState;
@@ -634,7 +753,7 @@ export async function getProposalWithLiveDiff(
     throw new AppError(404, 'NOT_FOUND', 'Proposal not found.');
   }
 
-  await assertProjectRole(db, params.userId, proposal.projectId, [
+  const userRole = await assertProjectRole(db, params.userId, proposal.projectId, [
     'owner',
     'editor',
     'reviewer',
@@ -688,6 +807,7 @@ export async function getProposalWithLiveDiff(
   return {
     proposal,
     document: doc,
+    userRole,
     ops: opRows.map((row, idx) => {
       const c = classified[idx]!;
       return {
@@ -738,7 +858,8 @@ export async function reviewProposal(
     'reviewer',
   ]);
 
-  return db.transaction(async (tx) => {
+  try {
+    return await db.transaction(async (tx) => {
     const [proposal] = await tx
       .select()
       .from(proposals)
@@ -947,7 +1068,17 @@ export async function reviewProposal(
       appliedCount: mergeResult.appliedCount,
       rejectedCount: mergeResult.rejectedCount,
     };
-  });
+    });
+  } catch (err) {
+    if (isPgUniqueViolation(err)) {
+      throw new AppError(
+        409,
+        ERROR_CODES.HEAD_REVISION_CONFLICT,
+        'Document head changed concurrently during proposal review; please retry.',
+      );
+    }
+    throw err;
+  }
 }
 
 export async function listProposalsForUser(

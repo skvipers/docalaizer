@@ -1,6 +1,6 @@
 import { createHash, randomBytes, scryptSync } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import type { DocumentBlock } from '@docalaizer/core';
+import { type DocumentBlock, createDocumentBlock } from '@docalaizer/core';
 import { createDb } from './index';
 import {
   agents,
@@ -11,19 +11,16 @@ import {
   users,
 } from './schema';
 
+function sha256(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+
 function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex');
   const derived = scryptSync(password, salt, 64).toString('hex');
   return `scrypt:${salt}:${derived}`;
 }
 
-function sha256(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
-}
-
-function hashBlockContent(content: unknown): string {
-  return `sha256:${sha256(JSON.stringify(content))}`;
-}
 
 async function seed() {
   const databaseUrl =
@@ -33,7 +30,16 @@ async function seed() {
 
   try {
     const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? 'admin@docalaizer.local').toLowerCase();
-    const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'docalaizer_dev_password';
+    const isProduction = process.env.NODE_ENV === 'production';
+    let adminPassword = process.env.SEED_ADMIN_PASSWORD;
+    let generatedAdminPassword = false;
+    if (!adminPassword) {
+      if (isProduction) {
+        throw new Error('SEED_ADMIN_PASSWORD must be set when running seed in production.');
+      }
+      adminPassword = randomBytes(18).toString('base64url');
+      generatedAdminPassword = true;
+    }
 
     let [admin] = await db.select().from(users).where(eq(users.email, adminEmail)).limit(1);
     if (!admin) {
@@ -47,6 +53,9 @@ async function seed() {
         })
         .returning();
       console.log(`Created admin user: ${adminEmail}`);
+      if (generatedAdminPassword) {
+        console.log(`Generated one-time dev admin password (save it now): ${adminPassword}`);
+      }
     }
 
     if (!admin) {
@@ -97,91 +106,58 @@ async function seed() {
     if (existingDocs.length === 0) {
       const now = new Date().toISOString();
       const blocks: DocumentBlock[] = [
-        {
-          id: 'blk_seed_intro',
-          type: 'markdown',
-          content:
-            '# Добро пожаловать в Docalaizer\n\nЭтот блок отредактирован вручную — AI-агенты не смогут перезаписать его без вашего аппрува в Review Inbox.',
-          contentHash: hashBlockContent(
-            '# Добро пожаловать в Docalaizer\n\nЭтот блок отредактирован вручную — AI-агенты не смогут перезаписать его без вашего аппрува в Review Inbox.',
-          ),
-          meta: {
-            origin: 'human',
-            lastEditedByType: 'human',
-            lastEditorId: admin.id,
-            lastEditedAt: now,
-            humanTouched: true,
-            lockedByHuman: false,
+        createDocumentBlock({
+          payload: {
+            id: 'blk_seed_intro',
+            type: 'markdown',
+            content:
+              '# Добро пожаловать в Docalaizer\n\nЭтот блок отредактирован вручную — AI-агенты не смогут перезаписать его без вашего аппрува в Review Inbox.',
           },
-        },
-        {
-          id: 'blk_seed_diagram',
-          type: 'diagram',
-          title: 'Поток аппрува правок AI',
-          content: {
-            engine: 'mermaid',
-            source:
-              'flowchart LR\n  Agent[AI Agent] -->|MCP Proposal| Inbox[Review Inbox]\n  Inbox -->|Approve| Main[(Main Revisions)]',
-          },
-          contentHash: hashBlockContent({
-            engine: 'mermaid',
-            source:
-              'flowchart LR\n  Agent[AI Agent] -->|MCP Proposal| Inbox[Review Inbox]\n  Inbox -->|Approve| Main[(Main Revisions)]',
-          }),
-          meta: {
-            origin: 'ai',
-            lastEditedByType: 'ai',
-            lastEditorId: 'seed',
-            lastEditedAt: now,
-            humanTouched: false,
-            lockedByHuman: false,
-          },
-        },
-        {
-          id: 'blk_seed_chart',
-          type: 'chart',
-          title: 'Latency p95 (ms)',
-          content: {
-            engine: 'vega-lite',
-            spec: {
-              $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-              mark: { type: 'line', point: true },
-              encoding: {
-                x: { field: 'day', type: 'ordinal', title: 'День' },
-                y: { field: 'p95_ms', type: 'quantitative', title: 'p95 (ms)' },
-              },
+          authorType: 'human',
+          authorId: admin.id,
+          now,
+        }),
+        createDocumentBlock({
+          payload: {
+            id: 'blk_seed_diagram',
+            type: 'diagram',
+            title: 'Поток аппрува правок AI',
+            content: {
+              engine: 'mermaid',
+              source:
+                'flowchart LR\n  Agent[AI Agent] -->|MCP Proposal| Inbox[Review Inbox]\n  Inbox -->|Approve| Main[(Main Revisions)]',
             },
-            data: [
-              { day: 'Mon', p95_ms: 210 },
-              { day: 'Tue', p95_ms: 175 },
-              { day: 'Wed', p95_ms: 118 },
-            ],
           },
-          contentHash: hashBlockContent({
-            engine: 'vega-lite',
-            spec: {
-              $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-              mark: { type: 'line', point: true },
-              encoding: {
-                x: { field: 'day', type: 'ordinal', title: 'День' },
-                y: { field: 'p95_ms', type: 'quantitative', title: 'p95 (ms)' },
+          authorType: 'ai',
+          authorId: 'seed',
+          now,
+        }),
+        createDocumentBlock({
+          payload: {
+            id: 'blk_seed_chart',
+            type: 'chart',
+            title: 'Latency p95 (ms)',
+            content: {
+              engine: 'vega-lite',
+              spec: {
+                $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+                mark: { type: 'line', point: true },
+                encoding: {
+                  x: { field: 'day', type: 'ordinal', title: 'День' },
+                  y: { field: 'p95_ms', type: 'quantitative', title: 'p95 (ms)' },
+                },
               },
+              data: [
+                { day: 'Mon', p95_ms: 210 },
+                { day: 'Tue', p95_ms: 175 },
+                { day: 'Wed', p95_ms: 118 },
+              ],
             },
-            data: [
-              { day: 'Mon', p95_ms: 210 },
-              { day: 'Tue', p95_ms: 175 },
-              { day: 'Wed', p95_ms: 118 },
-            ],
-          }),
-          meta: {
-            origin: 'ai',
-            lastEditedByType: 'ai',
-            lastEditorId: 'seed',
-            lastEditedAt: now,
-            humanTouched: false,
-            lockedByHuman: false,
           },
-        },
+          authorType: 'ai',
+          authorId: 'seed',
+          now,
+        }),
       ];
 
       await db.transaction(async (tx) => {

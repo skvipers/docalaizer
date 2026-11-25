@@ -1,12 +1,20 @@
 'use client';
 
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import { Lock, Unlock, ShieldAlert, Bot, UserCheck, Info, AlertTriangle } from 'lucide-react';
 import type { DocumentBlock, ProposalBlockPayload } from '@docalaizer/core';
 import { MermaidView } from '../visualizations/mermaid-view';
 import { VegaChartView } from '../visualizations/vega-chart-view';
+
+const markdownComponents: Components = {
+  table: ({ node: _node, ...props }) => (
+    <div className="overflow-x-auto">
+      <table {...props} />
+    </div>
+  ),
+};
 
 interface BlockContentViewProps {
   block: DocumentBlock | ProposalBlockPayload;
@@ -17,8 +25,12 @@ export function BlockContentView({ block, compact = false }: BlockContentViewPro
   switch (block.type) {
     case 'markdown':
       return (
-        <div className="doc-prose">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+        <div className="doc-prose max-w-[76ch]">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeSanitize]}
+            components={markdownComponents}
+          >
             {block.content}
           </ReactMarkdown>
         </div>
@@ -130,7 +142,11 @@ export function BlockContentView({ block, compact = false }: BlockContentViewPro
         >
           <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: variantStyles.text }} />
           <div className="doc-prose min-w-0 flex-1">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeSanitize]}
+              components={markdownComponents}
+            >
               {block.content.markdown}
             </ReactMarkdown>
           </div>
@@ -208,7 +224,10 @@ export function DocumentBlockCard({
               AI-блок
             </span>
           )}
-          <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          <span
+            className="hidden font-mono text-[11px] sm:inline sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+            style={{ color: 'var(--text-muted)' }}
+          >
             {block.id}
           </span>
         </div>

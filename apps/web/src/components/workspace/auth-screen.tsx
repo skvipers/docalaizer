@@ -1,19 +1,21 @@
 'use client';
 
 import { type FormEvent, useState } from 'react';
-import { BookOpen, Sun, Moon } from 'lucide-react';
+import { KeyRound, Sun, Moon } from 'lucide-react';
 import { ApiClientError, type AuthUser, api } from '@/lib/api';
+import { requestLocugardCredential } from '@/lib/webauthn';
 import { useTheme } from '../theme-provider';
 
 interface AuthScreenProps {
+  locugardEnabled: boolean;
   onAuthenticated: (user: AuthUser) => void;
 }
 
-export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
+export function AuthScreen({ locugardEnabled, onAuthenticated }: AuthScreenProps) {
   const { theme, toggleTheme } = useTheme();
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('admin@docalaizer.local');
-  const [password, setPassword] = useState('docalaizer_dev_password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,32 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     }
   };
 
+  const handleLocugardLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const options = await api.getLocugardLoginOptions();
+      const credential = await requestLocugardCredential(options.options);
+      const result = await api.verifyLocugardLogin({
+        challengeId: options.challenge_id,
+        credential,
+      });
+      onAuthenticated(result.user);
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setError(err.message);
+      } else if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        setError('Вход по passkey отменён или время ожидания истекло.');
+      } else if (err instanceof DOMException && err.name === 'SecurityError') {
+        setError('Проверьте HTTPS, RP ID и LOCUGARD_ORIGIN: origin должен совпадать с адресом Docalaizer.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Не удалось войти через LocuGard.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div
       className="flex min-h-screen flex-col items-center justify-center px-4 py-12"
@@ -54,7 +82,11 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           color: 'var(--text-secondary)',
         }}
       >
-        {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+        {theme === 'dark' ? (
+          <Sun className="h-4 w-4" strokeWidth={1.75} />
+        ) : (
+          <Moon className="h-4 w-4" strokeWidth={1.75} />
+        )}
         {theme === 'dark' ? 'Светлая' : 'Тёмная'}
       </button>
 
@@ -66,15 +98,13 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         }}
       >
         <div className="mb-6 flex items-center gap-2.5">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-lg"
-            style={{
-              backgroundColor: 'var(--accent-primary-soft)',
-              color: 'var(--accent-primary)',
-            }}
-          >
-            <BookOpen className="h-5 w-5" />
-          </div>
+          <img
+            src="/favicon.svg"
+            alt="Docalaizer"
+            width={36}
+            height={36}
+            className="h-9 w-9 shrink-0 rounded-lg"
+          />
           <div>
             <h1 className="text-lg font-semibold leading-tight">Docalaizer</h1>
             <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
@@ -82,6 +112,25 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             </p>
           </div>
         </div>
+
+        {locugardEnabled && (
+          <div className="mb-4">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void handleLocugardLogin()}
+              className="btn-primary inline-flex w-full items-center justify-center gap-2 rounded-md py-2 text-sm font-medium disabled:opacity-60"
+            >
+              <KeyRound className="h-4 w-4" strokeWidth={1.75} />
+              Войти с passkey через LocuGard
+            </button>
+            <div className="mt-4 flex items-center gap-3 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              <span className="h-px flex-1" style={{ backgroundColor: 'var(--border-default)' }} />
+              или с паролем
+              <span className="h-px flex-1" style={{ backgroundColor: 'var(--border-default)' }} />
+            </div>
+          </div>
+        )}
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3.5">
           {mode === 'register' && (
@@ -158,7 +207,8 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
           {error && (
             <div
-              className="rounded-md border px-3 py-2 text-xs"
+              role="alert"
+              className="rounded-md border px-3 py-2 text-sm"
               style={{
                 backgroundColor: 'var(--sem-danger-bg)',
                 borderColor: 'var(--sem-danger-border)',

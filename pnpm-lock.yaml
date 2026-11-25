@@ -14,6 +14,9 @@ importers:
       '@types/node':
         specifier: ^22.14.0
         version: 22.20.5
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       eslint:
         specifier: ^9.24.0
         version: 9.39.5(jiti@2.7.0)
@@ -118,6 +121,9 @@ importers:
       '@docalaizer/shared':
         specifier: workspace:*
         version: link:../shared
+      vega-lite:
+        specifier: ^6.5.0
+        version: 6.5.0(vega@5.33.1)
       zod:
         specifier: ^3.24.2
         version: 3.25.76

@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { createDb } from '@docalaizer/db';
 import { createApp } from './app';
+import { locugardConfigFromEnv } from './services/locugard.service';
 
 const port = Number(process.env.API_PORT ?? 3001);
 const databaseUrl =
@@ -11,9 +12,16 @@ const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http:/
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+const appBaseUrl = process.env.APP_BASE_URL ?? allowedOrigins[0] ?? 'http://localhost:3000';
 
 const { db, pool } = createDb(databaseUrl);
-const app = createApp({ db, allowPublicSignup, allowedOrigins });
+const app = createApp({
+  db,
+  allowPublicSignup,
+  allowedOrigins,
+  appBaseUrl,
+  locugard: locugardConfigFromEnv(),
+});
 
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`Docalaizer API listening on http://localhost:${info.port}`);

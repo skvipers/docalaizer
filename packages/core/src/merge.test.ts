@@ -550,3 +550,65 @@ describe('mergeHumanEdit (concurrent multi-user edits)', () => {
     }
   });
 });
+
+
+describe('block ID integrity', () => {
+  const existing = createDocumentBlock({
+    payload: { id: 'blk_existing', type: 'markdown', content: 'Existing content' },
+    authorType: 'ai',
+    authorId: 'agent_1',
+    now: T0,
+  });
+
+  it('rejects an accepted insert whose ID already exists, even with forced stale resolution', () => {
+    const op: ProposalOpInput = {
+      opType: 'insert',
+      afterBlockId: null,
+      newBlockPayload: { id: existing.id, type: 'markdown', content: 'Duplicate content' },
+    };
+    const [classified] = classifyProposalOps([op], [existing], [existing]);
+    expect(classified).toMatchObject({ conflictState: 'stale_conflict', canApply: false });
+
+    expect(() =>
+      applyProposalReview({
+        baseBlocks: [existing],
+        headBlocks: [existing],
+        ops: [op],
+        decisions: [{ decision: 'accepted', forceResolveStale: true }],
+        reviewerUserId: 'user_1',
+        agentId: 'agent_1',
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'DUPLICATE_BLOCK_ID' }));
+  });
+
+  it('rejects duplicate IDs within human edits and repeated inserts', () => {
+    expect(() =>
+      mergeHumanEdit({
+        baseBlocks: [],
+        headBlocks: [],
+        proposedBlocks: [
+          { id: 'same', type: 'markdown', content: 'First' },
+          { id: 'same', type: 'markdown', content: 'Second' },
+        ],
+        editorUserId: 'user_1',
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'DUPLICATE_BLOCK_ID' }));
+
+    const ops: ProposalOpInput[] = [
+      {
+        opType: 'insert',
+        afterBlockId: null,
+        newBlockPayload: { id: 'same', type: 'markdown', content: 'First' },
+      },
+      {
+        opType: 'insert',
+        afterBlockId: 'same',
+        newBlockPayload: { id: 'same', type: 'markdown', content: 'Second' },
+      },
+    ];
+    expect(classifyProposalOps(ops, [], [])[1]).toMatchObject({
+      conflictState: 'stale_conflict',
+      canApply: false,
+    });
+  });
+});

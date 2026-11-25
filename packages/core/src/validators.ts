@@ -1,3 +1,4 @@
+import { compile as compileVegaLite } from 'vega-lite';
 import { ERROR_CODES } from '@docalaizer/shared';
 import type { ChartPayload, DiagramPayload, ProposalBlockPayload } from './blocks';
 
@@ -72,6 +73,10 @@ const DANGEROUS_MERMAID_PATTERNS: Array<{ pattern: RegExp; message: string }> = 
   {
     pattern: /\bon(click|error|load|mouseover|focus)\s*=/i,
     message: 'Inline HTML event handlers are forbidden in Mermaid diagrams.',
+  },
+  {
+    pattern: /^\s*click\s+\S+\s+call\b/i,
+    message: 'Mermaid "click ... call" JS callback directives are forbidden for security reasons.',
   },
 ];
 
@@ -192,11 +197,37 @@ export function validateMermaidDiagram(
         line: firstContentLineNumber,
         message: `Unsupported or invalid Mermaid diagram header: "${firstContentLine}". Expected e.g. "flowchart LR", "sequenceDiagram", "erDiagram", "stateDiagram-v2", "classDiagram", "C4Context".`,
       });
-    } else if (/^(flowchart|graph)\b/.test(firstContentLine)) {
+    } else {
+      const bodyLines = lines
+        .slice(firstContentLineNumber)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && !l.startsWith('%%'));
+      if (bodyLines.length === 0) {
+        issues.push({
+          path: 'source',
+          line: firstContentLineNumber,
+          message: 'Mermaid diagram has a header but no diagram statements.',
+        });
+      }
+    }
+
+    if (matched && /^(flowchart|graph)\b/.test(firstContentLine)) {
       let subgraphDepth = 0;
       for (let i = firstContentLineNumber; i < lines.length; i++) {
         const trimmed = (lines[i] ?? '').trim();
         if (!trimmed || trimmed.startsWith('%%')) continue;
+        // Check balanced double quotes on non-comment flowchart lines
+        let quoteCount = 0;
+        for (let c = 0; c < trimmed.length; c++) {
+          if (trimmed[c] === '"' && trimmed[c - 1] !== '\\') quoteCount++;
+        }
+        if (quoteCount % 2 !== 0) {
+          issues.push({
+            path: 'source',
+            line: i + 1,
+            message: 'Unclosed double quote in Mermaid flowchart statement.',
+          });
+        }
         if (/^subgraph\b/.test(trimmed)) {
           subgraphDepth++;
         } else if (trimmed === 'end') {
@@ -217,7 +248,7 @@ export function validateMermaidDiagram(
           message: `Unclosed "subgraph" block(s): missing ${subgraphDepth} "end" statement(s).`,
         });
       }
-    } else if (/^sequenceDiagram\b/.test(firstContentLine)) {
+    } else if (matched && /^sequenceDiagram\b/.test(firstContentLine)) {
       let blockDepth = 0;
       for (let i = firstContentLineNumber; i < lines.length; i++) {
         const trimmed = (lines[i] ?? '').trim();
@@ -607,6 +638,36 @@ export function validateVegaLiteChart(
       path: 'data',
       message: 'Chart must provide inline data via chart.data or spec.data.values.',
     });
+  }
+
+  // Run full Vega-Lite compiler validation when structural & security checks pass
+  if (issues.length === 0) {
+    const compilableSpec =
+      payload.data !== undefined && payload.spec.data === undefined
+        ? { ...payload.spec, data: { values: payload.data } }
+        : payload.spec;
+
+    const silentLogger = {
+      level: () => 0,
+      error: (...args: unknown[]) => {
+        issues.push({
+          path: 'spec',
+          message: args.map((a) => String(a)).join(' '),
+        });
+      },
+      warn: () => {},
+      info: () => {},
+      debug: () => {},
+    };
+
+    try {
+      compileVegaLite(compilableSpec as never, { logger: silentLogger as never });
+    } catch (err) {
+      issues.push({
+        path: 'spec',
+        message: err instanceof Error ? err.message : 'Vega-Lite compilation failed.',
+      });
+    }
   }
 
   if (issues.length > 0) {

@@ -78,7 +78,21 @@ async function runTool<T>(fn: () => Promise<T>) {
   }
 }
 
-export function createDocalaizerMcpServer(db: Database, agent: AuthAgent): McpServer {
+export interface McpServerOptions {
+  appBaseUrl?: string;
+}
+
+function buildReviewUrl(baseUrl: string, projectId: string, proposalId: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '');
+  return `${trimmed}/?tab=inbox&projectId=${encodeURIComponent(projectId)}&proposalId=${encodeURIComponent(proposalId)}`;
+}
+
+export function createDocalaizerMcpServer(
+  db: Database,
+  agent: AuthAgent,
+  options: McpServerOptions = {},
+): McpServer {
+  const appBaseUrl = options.appBaseUrl ?? process.env.APP_BASE_URL ?? 'http://localhost:3000';
   const server = new McpServer({
     name: 'docalaizer',
     version: '0.1.0',
@@ -296,7 +310,7 @@ export function createDocalaizerMcpServer(db: Database, agent: AuthAgent): McpSe
               }))
             : []);
 
-        return createDocumentAsAgent(db, {
+        const result = await createDocumentAsAgent(db, {
           agent,
           projectId: args.project_id,
           parentId: args.parent_id ?? null,
@@ -307,6 +321,14 @@ export function createDocalaizerMcpServer(db: Database, agent: AuthAgent): McpSe
           rationale: args.rationale,
           idempotencyKey: args.idempotency_key,
         });
+        if (result.status === 'pending') {
+          return {
+            ...result,
+            proposal_id: result.proposal.id,
+            review_url: buildReviewUrl(appBaseUrl, result.proposal.projectId, result.proposal.id),
+          };
+        }
+        return result;
       }),
   );
 
@@ -320,20 +342,56 @@ export function createDocalaizerMcpServer(db: Database, agent: AuthAgent): McpSe
       title: z.string().min(1).max(200),
       rationale: z.string().max(2000).optional(),
       ops: z.array(proposalOpInputSchema),
+      metadata_changes: z
+        .object({
+          title: z.string().min(1).max(200).optional(),
+          slug: z.string().min(1).max(120).optional(),
+          icon: z.string().max(32).nullable().optional(),
+          parent_id: z.string().uuid().nullable().optional(),
+        })
+        .optional(),
       idempotency_key: z.string().max(200).optional(),
     },
     async (args) =>
-      runTool(async () =>
-        createProposalAsAgent(db, {
+      runTool(async () => {
+        const metadataChanges = args.metadata_changes
+          ? {
+              ...(args.metadata_changes.title !== undefined
+                ? { title: args.metadata_changes.title }
+                : {}),
+              ...(args.metadata_changes.slug !== undefined
+                ? { slug: args.metadata_changes.slug }
+                : {}),
+              ...(args.metadata_changes.icon !== undefined
+                ? { icon: args.metadata_changes.icon }
+                : {}),
+              ...(args.metadata_changes.parent_id !== undefined
+                ? { parentId: args.metadata_changes.parent_id }
+                : {}),
+            }
+          : undefined;
+        const result = await createProposalAsAgent(db, {
           agent,
           docId: args.doc_id,
           baseRevisionId: args.base_revision_id,
           title: args.title,
           rationale: args.rationale,
           ops: args.ops,
+          metadataChanges,
           idempotencyKey: args.idempotency_key,
-        }),
-      ),
+        });
+        if (result.status === 'pending') {
+          return {
+            ...result,
+            proposal_id: result.proposal.id,
+            review_url: buildReviewUrl(appBaseUrl, result.proposal.projectId, result.proposal.id),
+          };
+        }
+        return {
+          ...result,
+          ...(result.revision.proposalId ? { proposal_id: result.revision.proposalId } : {}),
+        };
+      }),
   );
 
   // 9. propose_markdown_update
@@ -349,8 +407,8 @@ export function createDocalaizerMcpServer(db: Database, agent: AuthAgent): McpSe
       idempotency_key: z.string().max(200).optional(),
     },
     async (args) =>
-      runTool(async () =>
-        proposeMarkdownUpdateAsAgent(db, {
+      runTool(async () => {
+        const result = await proposeMarkdownUpdateAsAgent(db, {
           agent,
           docId: args.doc_id,
           baseRevisionId: args.base_revision_id,
@@ -358,8 +416,19 @@ export function createDocalaizerMcpServer(db: Database, agent: AuthAgent): McpSe
           rationale: args.rationale,
           annotatedMarkdown: args.annotated_markdown,
           idempotencyKey: args.idempotency_key,
-        }),
-      ),
+        });
+        if (result.status === 'pending') {
+          return {
+            ...result,
+            proposal_id: result.proposal.id,
+            review_url: buildReviewUrl(appBaseUrl, result.proposal.projectId, result.proposal.id),
+          };
+        }
+        return {
+          ...result,
+          ...(result.revision.proposalId ? { proposal_id: result.revision.proposalId } : {}),
+        };
+      }),
   );
 
   // 10. validate_visualization
@@ -368,14 +437,21 @@ export function createDocalaizerMcpServer(db: Database, agent: AuthAgent): McpSe
     'Validate Mermaid diagram or Vega-Lite chart spec before submitting a Proposal.',
     {
       type: z.enum(['diagram', 'chart']),
+      engine: z.enum(['mermaid', 'vega-lite']).optional(),
       payload: z.unknown(),
     },
-    async ({ type, payload }) =>
+    async ({ type, engine, payload }) =>
       runTool(async () => {
         assertAgentScope(agent, 'docs:read');
         if (type === 'diagram') {
+          if (engine && engine !== 'mermaid') {
+            throw new AppError(400, 'VALIDATION_ERROR', 'Engine must be "mermaid" for diagram type.');
+          }
           const parsed = diagramPayloadSchema.parse(payload);
           return validateMermaidDiagram(parsed);
+        }
+        if (engine && engine !== 'vega-lite') {
+          throw new AppError(400, 'VALIDATION_ERROR', 'Engine must be "vega-lite" for chart type.');
         }
         const parsed = chartPayloadSchema.parse(payload);
         return validateVegaLiteChart(parsed);
@@ -389,14 +465,14 @@ export function createDocalaizerMcpServer(db: Database, agent: AuthAgent): McpSe
     {
       project_id: z.string().uuid().optional(),
       doc_id: z.string().uuid().optional(),
-      status: z.enum(PROPOSAL_STATUSES).optional(),
+      status: z.enum([...PROPOSAL_STATUSES, 'all']).optional(),
     },
     async ({ project_id, doc_id, status }) =>
       runTool(async () => {
         const items = await listProposalsForAgent(db, agent, {
           ...(project_id ? { projectId: project_id } : {}),
           ...(doc_id ? { docId: doc_id } : {}),
-          ...(status ? { status } : {}),
+          ...(status && status !== 'all' ? { status } : {}),
         });
         return { proposals: items };
       }),
@@ -438,8 +514,32 @@ export async function handleMcpHttpRequest(
   db: Database,
   agent: AuthAgent,
   req: Request,
+  options: McpServerOptions = {},
 ): Promise<Response> {
-  const server = createDocalaizerMcpServer(db, agent);
+  // Stateless Streamable HTTP does not support standalone GET SSE streams or DELETE sessions.
+  // Returning 405 Method Not Allowed per the MCP Streamable HTTP spec tells clients not to
+  // open/retry a standalone SSE stream.
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Method not allowed.',
+        },
+        id: null,
+      }),
+      {
+        status: 405,
+        headers: {
+          Allow: 'POST',
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+  }
+
+  const server = createDocalaizerMcpServer(db, agent, options);
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // Stateless per-request Streamable HTTP
     enableJsonResponse: true,

@@ -214,20 +214,37 @@ export async function upsertProjectMember(
     throw new AppError(400, 'VALIDATION_ERROR', 'Provide either email or userId.');
   }
 
-  const [member] = await db
-    .insert(projectMembers)
-    .values({
-      projectId,
-      userId: targetUserId,
-      role: targetEmailOrUserId.role,
-    })
-    .onConflictDoUpdate({
-      target: [projectMembers.projectId, projectMembers.userId],
-      set: { role: targetEmailOrUserId.role },
-    })
-    .returning();
+  return db.transaction(async (tx) => {
+    // Prevent demoting the last owner of the project
+    if (targetEmailOrUserId.role !== 'owner') {
+      const owners = await tx
+        .select({ userId: projectMembers.userId })
+        .from(projectMembers)
+        .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.role, 'owner')));
+      if (owners.length === 1 && owners[0]?.userId === targetUserId) {
+        throw new AppError(
+          400,
+          'VALIDATION_ERROR',
+          'Cannot demote the last owner of the project. Assign another owner first.',
+        );
+      }
+    }
 
-  return member;
+    const [member] = await tx
+      .insert(projectMembers)
+      .values({
+        projectId,
+        userId: targetUserId,
+        role: targetEmailOrUserId.role,
+      })
+      .onConflictDoUpdate({
+        target: [projectMembers.projectId, projectMembers.userId],
+        set: { role: targetEmailOrUserId.role },
+      })
+      .returning();
+
+    return member;
+  });
 }
 
 export async function removeProjectMember(
@@ -240,9 +257,22 @@ export async function removeProjectMember(
   if (actorUserId === targetUserId) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Owner cannot remove themselves from the project.');
   }
-  await db
-    .delete(projectMembers)
-    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, targetUserId)));
+  await db.transaction(async (tx) => {
+    const owners = await tx
+      .select({ userId: projectMembers.userId })
+      .from(projectMembers)
+      .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.role, 'owner')));
+    if (owners.length === 1 && owners[0]?.userId === targetUserId) {
+      throw new AppError(
+        400,
+        'VALIDATION_ERROR',
+        'Cannot remove the last owner of the project.',
+      );
+    }
+    await tx
+      .delete(projectMembers)
+      .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, targetUserId)));
+  });
 }
 
 export interface DocumentTreeNode {

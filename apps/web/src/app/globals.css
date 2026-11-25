@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --bg-canvas: #faf9f7;
   --bg-surface: #ffffff;
   --bg-subtle: #f3f1ed;
@@ -34,6 +35,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg-canvas: #111214;
   --bg-surface: #181a1e;
   --bg-subtle: #141619;
@@ -113,6 +115,13 @@ pre,
   margin-bottom: 0.5rem;
 }
 
+.doc-prose h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
+
 .doc-prose p {
   margin-bottom: 0.75rem;
 }
@@ -171,6 +180,7 @@ pre,
 
 .doc-prose a {
   color: var(--accent-primary);
+  overflow-wrap: anywhere;
   text-decoration: underline;
   text-underline-offset: 2px;
 }

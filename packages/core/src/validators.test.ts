@@ -67,6 +67,15 @@ describe('validateMermaidDiagram', () => {
       'flowchart LR\n  A["<script>alert(1)</script>"] --> B',
     );
     expect(scriptTag.valid).toBe(false);
+
+    const clickCall = validateMermaidDiagram('flowchart LR\n  A --> B\n  click A call evilFn()');
+    expect(clickCall.valid).toBe(false);
+
+    const headerOnly = validateMermaidDiagram('flowchart LR\n  %% only comment');
+    expect(headerOnly.valid).toBe(false);
+
+    const unclosedQuote = validateMermaidDiagram('flowchart LR\n  A["Unclosed label] --> B');
+    expect(unclosedQuote.valid).toBe(false);
   });
 });
 
@@ -157,5 +166,16 @@ describe('validateVegaLiteChart', () => {
       content: { engine: 'vega-lite', spec: {} },
     });
     expect(payloadViaWrapper.valid).toBe(false);
+
+    const invalidCompilerSpec = validateVegaLiteChart({
+      engine: 'vega-lite',
+      spec: {
+        mark: 'bar',
+        transform: [{ calculate: '1 + (', as: 'broken' }],
+        encoding: { x: { field: 'a', type: 'ordinal' }, y: { field: 'b', type: 'quantitative' } },
+      },
+      data: [{ a: 'x', b: 1 }],
+    });
+    expect(invalidCompilerSpec.valid).toBe(false);
   });
 });

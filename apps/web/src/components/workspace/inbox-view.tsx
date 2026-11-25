@@ -500,14 +500,28 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                         )}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleApplyReview()}
-                      disabled={submitting}
-                      className="btn-primary rounded-md px-4 py-2 text-xs font-medium disabled:opacity-60"
-                    >
-                      {submitting ? 'Применение…' : 'Применить ревью'}
-                    </button>
+                    {detail.userRole === 'viewer' ? (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium"
+                        style={{
+                          backgroundColor: 'var(--bg-subtle)',
+                          borderColor: 'var(--border-default)',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        Только просмотр (Viewer)
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleApplyReview()}
+                        disabled={submitting}
+                        className="btn-primary rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60"
+                      >
+                        {submitting ? 'Применение…' : 'Применить ревью'}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -516,9 +530,12 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                   const state = decisions[op.row.id];
                   if (!state) return null;
 
+                  const isReadOnly = detail.userRole === 'viewer';
                   const isLocked = op.liveConflictState === 'locked';
                   const canManualEdit =
-                    !isLocked && (op.row.opType === 'update' || op.row.opType === 'insert');
+                    !isReadOnly &&
+                    !isLocked &&
+                    (op.row.opType === 'update' || op.row.opType === 'insert');
 
                   const editedPreview =
                     state.decision === 'edited'
@@ -592,9 +609,9 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                         <div className="flex flex-wrap items-center gap-1.5">
                           <button
                             type="button"
-                            disabled={isLocked || !op.canApply}
+                            disabled={isReadOnly || isLocked || !op.canApply}
                             onClick={() => updateDecision(op.row.id, { decision: 'accepted' })}
-                            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-40"
+                            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[13px] font-medium disabled:opacity-40"
                             style={{
                               backgroundColor:
                                 state.decision === 'accepted'
@@ -618,7 +635,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                             <button
                               type="button"
                               onClick={() => updateDecision(op.row.id, { decision: 'edited' })}
-                              className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium"
+                              className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[13px] font-medium"
                               style={{
                                 backgroundColor:
                                   state.decision === 'edited'
@@ -641,8 +658,9 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
 
                           <button
                             type="button"
+                            disabled={isReadOnly}
                             onClick={() => updateDecision(op.row.id, { decision: 'rejected' })}
-                            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium"
+                            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[13px] font-medium disabled:opacity-40"
                             style={{
                               backgroundColor:
                                 state.decision === 'rejected'

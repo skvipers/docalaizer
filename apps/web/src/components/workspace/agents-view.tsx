@@ -3,6 +3,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { Bot, Copy, Check, KeyRound, ShieldAlert, Ban } from 'lucide-react';
 import { AGENT_SCOPES, type AgentScope, type ProjectScopeMode } from '@docalaizer/shared';
+import { ProjectIcon } from '../ui/entity-icon';
 import { type AgentDto, ApiClientError, type ProjectListItemDto, api } from '@/lib/api';
 
 interface AgentsViewProps {
@@ -144,8 +145,8 @@ export function AgentsView({ projects }: AgentsViewProps) {
                 color: 'var(--text-primary)',
               }}
             >
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? 'Скопировано' : 'Копировать'}
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              <span aria-live="polite">{copied ? 'Скопировано' : 'Копировать'}</span>
             </button>
           </div>
           <pre
@@ -167,7 +168,8 @@ export function AgentsView({ projects }: AgentsViewProps) {
 
       {error && (
         <div
-          className="rounded-lg border px-3.5 py-2.5 text-xs"
+          role="alert"
+          className="rounded-lg border px-3.5 py-2.5 text-sm"
           style={{
             backgroundColor: 'var(--sem-danger-bg)',
             borderColor: 'var(--sem-danger-border)',
@@ -190,10 +192,11 @@ export function AgentsView({ projects }: AgentsViewProps) {
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+            <label htmlFor="agent-name" className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
               Название агента
             </label>
             <input
+              id="agent-name"
               type="text"
               required
               value={name}
@@ -208,10 +211,11 @@ export function AgentsView({ projects }: AgentsViewProps) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+            <label htmlFor="agent-description" className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
               Описание (опционально)
             </label>
             <input
+              id="agent-description"
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -300,15 +304,17 @@ export function AgentsView({ projects }: AgentsViewProps) {
                   <button
                     key={project.id}
                     type="button"
+                    aria-pressed={selected}
                     onClick={() => toggleProjectId(project.id)}
-                    className="rounded-md border px-2.5 py-1 text-xs transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[13px] transition-colors"
                     style={{
                       backgroundColor: selected ? 'var(--accent-primary-soft)' : 'var(--bg-subtle)',
                       borderColor: selected ? 'var(--accent-primary)' : 'var(--border-default)',
                       color: selected ? 'var(--accent-primary)' : 'var(--text-secondary)',
                     }}
                   >
-                    {project.icon ?? '📁'} {project.name}
+                    <ProjectIcon icon={project.icon} />
+                    <span>{project.name}</span>
                   </button>
                 );
               })}

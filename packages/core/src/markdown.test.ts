@@ -266,3 +266,32 @@ describe('diffMarkdownToProposalOps', () => {
     });
   });
 });
+
+
+describe('chart data round-trip', () => {
+  it('preserves chart.data separately from the Vega-Lite spec', () => {
+    const block = createDocumentBlock({
+      payload: {
+        id: 'blk_chart_data',
+        type: 'chart',
+        content: {
+          engine: 'vega-lite',
+          spec: { mark: 'line', encoding: { x: { field: 'day' }, y: { field: 'ms' } } },
+          data: [{ day: 'Mon', ms: 120 }],
+          caption: 'Latency',
+        },
+      },
+      authorType: 'ai',
+      authorId: 'agent_1',
+      now: NOW,
+    });
+
+    const serialized = serializeBlocksToAnnotatedMarkdown([block]);
+    expect(serialized).toContain('data="separate"');
+    const [parsed] = parseAnnotatedMarkdown(serialized);
+    expect(parsed).toMatchObject({ id: block.id, type: 'chart', content: block.content });
+    if (parsed?.type === 'chart') {
+      expect(computeBlockContentHash(parsed.type, parsed.content)).toBe(block.contentHash);
+    }
+  });
+});

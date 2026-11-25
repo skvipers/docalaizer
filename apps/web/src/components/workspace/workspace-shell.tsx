@@ -1,10 +1,10 @@
 'use client';
 
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
-  BookOpen,
   Bot,
-  ChevronRight,
+  Check,
+  ChevronDown,
   Edit3,
   Eye,
   FileText,
@@ -46,6 +46,14 @@ import {
 import { BlockContentView, DocumentBlockCard } from '../blocks/block-renderer';
 import { DocumentEditor } from '../blocks/document-editor';
 import { useTheme } from '../theme-provider';
+import { IconButton } from '../ui/icon-button';
+import { IconPicker } from '../ui/icon-picker';
+import {
+  DocumentIcon,
+  normalizeProjectIcon,
+  ProjectIcon,
+  type ProjectIconKey,
+} from '../ui/entity-icon';
 import { AgentsView } from './agents-view';
 import { AuthScreen } from './auth-screen';
 import { InboxView } from './inbox-view';
@@ -88,8 +96,10 @@ function flattenTreeHierarchy(docs: DocumentTreeItemDto[]): FlatTreeRow[] {
 
 export function WorkspaceShell() {
   const { theme, toggleTheme } = useTheme();
+  const projectSwitcherId = useId();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [locugardEnabled, setLocugardEnabled] = useState(false);
 
   const [projects, setProjects] = useState<ProjectListItemDto[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -100,7 +110,9 @@ export function WorkspaceShell() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('doc');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editorDirty, setEditorDirty] = useState(false);
   const [savingDoc, setSavingDoc] = useState(false);
+  const [loadingDoc, setLoadingDoc] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
   const [isConflictError, setIsConflictError] = useState(false);
 
@@ -112,13 +124,25 @@ export function WorkspaceShell() {
   const [members, setMembers] = useState<ProjectMemberDto[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<ProjectRole>('editor');
+  const [projectName, setProjectName] = useState('');
+  const [projectIcon, setProjectIcon] = useState<ProjectIconKey>('folder');
+  const [savingProject, setSavingProject] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResultDto[]>([]);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const desktopSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const projectSwitcherRef = useRef<HTMLDivElement | null>(null);
+  const projectTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const docRequestRef = useRef(0);
 
   const [creatingProject, setCreatingProject] = useState(false);
+  const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
   const [newProjName, setNewProjName] = useState('');
   const [creatingDoc, setCreatingDoc] = useState(false);
   const [newDocTitle, setNewDocTitle] = useState('');
@@ -129,15 +153,63 @@ export function WorkspaceShell() {
       .then((res) => setUser(res.user))
       .catch(() => setUser(null))
       .finally(() => setCheckingAuth(false));
+    api
+      .getAuthProviders()
+      .then((res) => setLocugardEnabled(res.providers.locugard.enabled))
+      .catch(() => setLocugardEnabled(false));
   }, []);
 
-  // Keyboard shortcuts: Cmd/Ctrl+K focuses search; Escape closes overlays
+  const confirmDiscardChanges = () =>
+    !editing ||
+    !editorDirty ||
+    window.confirm('Есть несохранённые изменения. Продолжить без сохранения?');
+
+  const changeTab = (nextTab: ActiveTab) => {
+    if (!confirmDiscardChanges()) return;
+    if (nextTab !== 'doc') {
+      setEditing(false);
+      setEditorDirty(false);
+    }
+    setActiveTab(nextTab);
+    setMobileMenuOpen(false);
+  };
+
+  const changeDocument = (docId: string) => {
+    if (docId === activeDocId && activeTab === 'doc') {
+      setMobileMenuOpen(false);
+      return true;
+    }
+    if (!confirmDiscardChanges()) return false;
+    setEditing(false);
+    setEditorDirty(false);
+    setActiveDocId(docId);
+    setActiveTab('doc');
+    setMobileMenuOpen(false);
+    return true;
+  };
+
+  const changeProject = (projectId: string) => {
+    if (projectId === activeProjectId && activeTab === 'doc') return true;
+    if (!confirmDiscardChanges()) return false;
+    setEditing(false);
+    setEditorDirty(false);
+    setActiveProjectId(projectId || null);
+    setActiveTab('doc');
+    return true;
+  };
+
+  // Keyboard shortcuts: Cmd/Ctrl+K focuses the visible search input; Escape closes overlays
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setMobileMenuOpen(true);
-        setTimeout(() => searchInputRef.current?.focus(), 0);
+        if (window.matchMedia('(min-width: 768px)').matches) {
+          setMobileMenuOpen(false);
+          desktopSearchInputRef.current?.focus();
+        } else {
+          setMobileMenuOpen(true);
+          setTimeout(() => mobileSearchInputRef.current?.focus(), 0);
+        }
       } else if (e.key === 'Escape') {
         setSearchResults([]);
         setMobileMenuOpen(false);
@@ -146,6 +218,61 @@ export function WorkspaceShell() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const drawer = drawerRef.current;
+    const focusableSelector =
+      'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(drawer?.querySelectorAll<HTMLElement>(focusableSelector) ?? []);
+    focusable[0]?.focus();
+
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', trapFocus);
+    return () => {
+      document.removeEventListener('keydown', trapFocus);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!projectSwitcherOpen) return;
+    const switcher = projectSwitcherRef.current;
+    const selectedOption = switcher?.querySelector<HTMLElement>('[data-project-option][aria-selected="true"]');
+    (selectedOption ?? switcher?.querySelector<HTMLElement>('[data-project-option]'))?.focus();
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !switcher?.contains(event.target)) {
+        setProjectSwitcherOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setProjectSwitcherOpen(false);
+      projectTriggerRef.current?.focus();
+    };
+
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [projectSwitcherOpen]);
 
   const loadProjects = useCallback(async () => {
     const res = await api.listProjects();
@@ -182,23 +309,35 @@ export function WorkspaceShell() {
   }, [activeProjectId, loadTree]);
 
   const loadDoc = useCallback(async (docId: string) => {
+    const requestId = ++docRequestRef.current;
+    setLoadingDoc(true);
+    setDocDetail((current) => (current?.document.id === docId ? current : null));
     try {
       const res = await api.getDoc(docId);
+      if (requestId !== docRequestRef.current) return false;
       setDocDetail(res);
       setDocError(null);
       setIsConflictError(false);
+      return true;
     } catch (err) {
+      if (requestId !== docRequestRef.current) return false;
       setDocError(err instanceof ApiClientError ? err.message : 'Ошибка загрузки страницы.');
+      return false;
+    } finally {
+      if (requestId === docRequestRef.current) setLoadingDoc(false);
     }
   }, []);
 
   useEffect(() => {
     if (activeDocId) {
       setEditing(false);
+      setEditorDirty(false);
       setShowHistory(false);
       setPreviewRevision(null);
       void loadDoc(activeDocId);
     } else {
+      docRequestRef.current += 1;
+      setLoadingDoc(false);
       setDocDetail(null);
     }
   }, [activeDocId, loadDoc]);
@@ -222,23 +361,53 @@ export function WorkspaceShell() {
   }, [activeTab, activeProjectId, loadMembers]);
 
   useEffect(() => {
-    if (!searchQuery.trim() || !user) {
+    const query = searchQuery.trim();
+    if (!query || !user) {
       setSearchResults([]);
+      setSearching(false);
+      setSearchError(null);
       return;
     }
+
+    let cancelled = false;
+    setSearching(true);
+    setSearchError(null);
     const timer = setTimeout(() => {
       void api
-        .searchDocs(searchQuery, activeProjectId ?? undefined)
-        .then((res) => setSearchResults(res.results))
-        .catch(() => setSearchResults([]));
+        .searchDocs(query, activeProjectId ?? undefined)
+        .then((res) => {
+          if (!cancelled) setSearchResults(res.results);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setSearchResults([]);
+          setSearchError(err instanceof ApiClientError ? err.message : 'Ошибка поиска.');
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
     }, 200);
-    return () => clearTimeout(timer);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [searchQuery, activeProjectId, user]);
 
   const activeProjectEntry = useMemo(
     () => projects.find((p) => p.project.id === activeProjectId) ?? null,
     [projects, activeProjectId],
   );
+
+  useEffect(() => {
+    setProjectName(activeProjectEntry?.project.name ?? '');
+    setProjectIcon(normalizeProjectIcon(activeProjectEntry?.project.icon ?? null));
+  }, [activeProjectEntry?.project.id, activeProjectEntry?.project.name, activeProjectEntry?.project.icon]);
+
+  useEffect(() => {
+    setSettingsError(null);
+    setSettingsSuccess(null);
+  }, [activeProjectEntry?.project.id]);
 
   const flatTree = useMemo(() => flattenTreeHierarchy(tree), [tree]);
 
@@ -255,7 +424,9 @@ export function WorkspaceShell() {
 
   const handleCreateProject = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newProjName.trim()) return;
+    if (!newProjName.trim() || !confirmDiscardChanges()) return;
+    setEditing(false);
+    setEditorDirty(false);
     const slug =
       newProjName
         .toLowerCase()
@@ -271,7 +442,9 @@ export function WorkspaceShell() {
 
   const handleCreateDoc = async (e: FormEvent) => {
     e.preventDefault();
-    if (!activeProjectId || !newDocTitle.trim()) return;
+    if (!activeProjectId || !newDocTitle.trim() || !confirmDiscardChanges()) return;
+    setEditing(false);
+    setEditorDirty(false);
     const slug =
       newDocTitle
         .toLowerCase()
@@ -283,7 +456,7 @@ export function WorkspaceShell() {
       blocks: [
         {
           type: 'markdown',
-          content: `# ${newDocTitle.trim()}\n\nНачните описывать архитектуру или добавьте диаграмму Mermaid / график Vega-Lite.`,
+          content: 'Начните описывать архитектуру или добавьте диаграмму Mermaid / график Vega-Lite.',
         },
       ],
     });
@@ -297,6 +470,7 @@ export function WorkspaceShell() {
 
   const handleSaveDoc = async (
     title: string,
+    icon: ProjectIconKey,
     blocks: ProposalBlockPayload[],
     summary: string,
   ) => {
@@ -309,11 +483,13 @@ export function WorkspaceShell() {
         expectedHeadRevisionId: docDetail.headRevision.id,
         proposedBlocks: blocks,
         title,
+        icon,
         summary,
       });
       await loadDoc(docDetail.document.id);
       if (activeProjectId) await loadTree(activeProjectId);
       setEditing(false);
+      setEditorDirty(false);
     } catch (err) {
       if (err instanceof ApiClientError) {
         setDocError(err.message);
@@ -362,6 +538,28 @@ export function WorkspaceShell() {
     setRevisions(res.revisions);
   };
 
+  const handleUpdateProjectDetails = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!activeProjectId || activeProjectEntry?.role !== 'owner' || !projectName.trim()) return;
+    setSavingProject(true);
+    setSettingsError(null);
+    setSettingsSuccess(null);
+    try {
+      await api.updateProject(activeProjectId, {
+        name: projectName.trim(),
+        icon: projectIcon,
+      });
+      await loadProjects();
+      setSettingsSuccess('Название и иконка проекта сохранены.');
+    } catch (err) {
+      setSettingsError(
+        err instanceof ApiClientError ? err.message : 'Не удалось сохранить настройки проекта.',
+      );
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
   const handleUpdatePolicy = async (policy: ApprovalPolicy) => {
     if (!activeProjectId) return;
     await api.updateProject(activeProjectId, { defaultApprovalPolicy: policy });
@@ -399,6 +597,7 @@ export function WorkspaceShell() {
   };
 
   const handleLogout = async () => {
+    if (!confirmDiscardChanges()) return;
     await api.logout();
     setUser(null);
   };
@@ -415,12 +614,12 @@ export function WorkspaceShell() {
   }
 
   if (!user) {
-    return <AuthScreen onAuthenticated={setUser} />;
+    return <AuthScreen locugardEnabled={locugardEnabled} onAuthenticated={setUser} />;
   }
 
   const totalPending = projects.reduce((acc, p) => acc + p.pendingProposalsCount, 0);
 
-  const sidebarContent = (
+  const renderSidebar = (isMobile: boolean) => (
     <aside
       aria-label="Навигация по проектам и страницам"
       className="flex h-full w-64 shrink-0 flex-col border-r"
@@ -434,64 +633,144 @@ export function WorkspaceShell() {
         style={{ borderColor: 'var(--border-default)' }}
       >
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <BookOpen className="h-4 w-4" style={{ color: 'var(--accent-primary)' }} />
+          <img
+            src="/favicon.svg"
+            alt="Docalaizer"
+            width={20}
+            height={20}
+            className="h-5 w-5 shrink-0 rounded"
+          />
           <span>Docalaizer</span>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
+          <IconButton
             onClick={toggleTheme}
-            className="nav-item rounded p-1.5"
+            label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
             style={{ color: 'var(--text-secondary)' }}
-            aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
           >
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
-          <button
-            type="button"
+            {theme === 'dark' ? (
+              <Sun className="h-4 w-4" strokeWidth={1.75} />
+            ) : (
+              <Moon className="h-4 w-4" strokeWidth={1.75} />
+            )}
+          </IconButton>
+          <IconButton
             onClick={() => setMobileMenuOpen(false)}
-            className="nav-item rounded p-1.5 md:hidden"
+            className="md:hidden"
+            label="Закрыть меню"
             style={{ color: 'var(--text-secondary)' }}
-            aria-label="Закрыть меню"
           >
-            <X className="h-4 w-4" />
-          </button>
+            <X className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
         </div>
       </div>
 
       {/* Project Switcher */}
       <div className="space-y-2 border-b p-3" style={{ borderColor: 'var(--border-default)' }}>
         <div className="flex items-center gap-1.5">
-          <select
-            aria-label="Выбор проекта"
-            value={activeProjectId ?? ''}
-            onChange={(e) => {
-              setActiveProjectId(e.target.value || null);
-              setActiveTab('doc');
-            }}
-            className="min-w-0 flex-1 rounded-md border px-2 py-1.5 text-xs font-medium"
-            style={{
-              backgroundColor: 'var(--bg-surface)',
-              borderColor: 'var(--border-default)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            {projects.length === 0 && <option value="">Нет проектов</option>}
-            {projects.map(({ project }) => (
-              <option key={project.id} value={project.id}>
-                {project.icon ?? '📘'} {project.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
+          <div ref={projectSwitcherRef} className="relative min-w-0 flex-1">
+            <button
+              ref={projectTriggerRef}
+              type="button"
+              disabled={projects.length === 0}
+              aria-haspopup="listbox"
+              aria-expanded={projectSwitcherOpen}
+              aria-controls={`${projectSwitcherId}-${isMobile ? 'mobile' : 'desktop'}`}
+              aria-label="Выбор проекта"
+              onClick={() => setProjectSwitcherOpen((open) => !open)}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowDown') return;
+                event.preventDefault();
+                setProjectSwitcherOpen(true);
+              }}
+              className="flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-[13px] font-medium disabled:opacity-60"
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                borderColor: 'var(--border-default)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <ProjectIcon icon={activeProjectEntry?.project.icon} className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">
+                {activeProjectEntry?.project.name ?? (projects.length > 0 ? 'Выберите проект' : 'Нет проектов')}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 transition-transform ${projectSwitcherOpen ? 'rotate-180' : ''}`}
+                style={{ color: 'var(--text-muted)' }}
+              />
+            </button>
+
+            {projectSwitcherOpen && (
+              <ul
+                id={`${projectSwitcherId}-${isMobile ? 'mobile' : 'desktop'}`}
+                role="listbox"
+                aria-label="Проекты"
+                className="absolute left-0 right-0 top-10 z-30 max-h-60 overflow-y-auto rounded-md border p-1 shadow-md"
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  borderColor: 'var(--border-default)',
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Tab') {
+                    setProjectSwitcherOpen(false);
+                    projectTriggerRef.current?.focus();
+                    return;
+                  }
+                  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                  event.preventDefault();
+                  const options = Array.from(
+                    event.currentTarget.querySelectorAll<HTMLElement>('[data-project-option]'),
+                  );
+                  if (options.length === 0) return;
+                  const currentIndex = options.indexOf(document.activeElement as HTMLElement);
+                  const nextIndex =
+                    event.key === 'Home'
+                      ? 0
+                      : event.key === 'End'
+                        ? options.length - 1
+                        : event.key === 'ArrowDown'
+                          ? (currentIndex + 1 + options.length) % options.length
+                          : (currentIndex - 1 + options.length) % options.length;
+                  options[nextIndex]?.focus();
+                }}
+              >
+                {projects.map(({ project }) => {
+                  const selected = project.id === activeProjectId;
+                  return (
+                    <li key={project.id} role="none">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        data-project-option
+                        onClick={() => {
+                          if (!changeProject(project.id)) return;
+                          setProjectSwitcherOpen(false);
+                          projectTriggerRef.current?.focus();
+                        }}
+                        className="nav-item flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[13px]"
+                        style={{
+                          backgroundColor: selected ? 'var(--accent-primary-soft)' : undefined,
+                          color: selected ? 'var(--accent-primary)' : 'var(--text-primary)',
+                        }}
+                      >
+                        <ProjectIcon icon={project.icon} className="h-4 w-4 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                        {selected && <Check className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+          <IconButton
             onClick={() => setCreatingProject((v) => !v)}
-            className="btn-secondary rounded-md p-1.5"
-            aria-label="Новый проект"
-            title="Новый проект"
+            className="btn-secondary"
+            label="Новый проект"
           >
-            <FolderPlus className="h-3.5 w-3.5" />
-          </button>
+            <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
         </div>
 
         {creatingProject && (
@@ -509,7 +788,7 @@ export function WorkspaceShell() {
                 color: 'var(--text-primary)',
               }}
             />
-            <button type="submit" className="btn-primary rounded px-2 py-1 text-xs font-medium">
+            <button type="submit" className="btn-primary rounded px-2 py-1 text-[13px] font-medium">
               OK
             </button>
           </form>
@@ -522,43 +801,54 @@ export function WorkspaceShell() {
             style={{ color: 'var(--text-muted)' }}
           />
           <input
-            ref={searchInputRef}
+            ref={isMobile ? mobileSearchInputRef : desktopSearchInputRef}
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Поиск… (Ctrl+K)"
             aria-label="Поиск по документации"
-            className="w-full rounded-md border py-1.5 pl-8 pr-2 text-xs"
+            className="w-full rounded-md border py-1.5 pl-8 pr-2 text-[13px]"
             style={{
               backgroundColor: 'var(--bg-surface)',
               borderColor: 'var(--border-default)',
               color: 'var(--text-primary)',
             }}
           />
-          {searchResults.length > 0 && (
+          {searchQuery.trim() && (
             <div
-              className="absolute left-0 right-0 top-9 z-20 max-h-56 overflow-y-auto rounded-md border shadow-md"
+              className="absolute left-0 right-0 top-10 z-20 max-h-56 overflow-y-auto rounded-md border shadow-md"
               style={{
                 backgroundColor: 'var(--bg-surface)',
                 borderColor: 'var(--border-default)',
               }}
             >
-              {searchResults.map((r) => (
-                <button
-                  key={r.documentId}
-                  type="button"
-                  onClick={() => {
-                    setActiveDocId(r.documentId);
-                    setActiveTab('doc');
-                    setSearchQuery('');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="nav-item flex w-full items-center gap-2 px-3 py-2 text-left text-xs"
-                >
-                  <FileText className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{r.title}</span>
-                </button>
-              ))}
+              {searching ? (
+                <div role="status" className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Поиск…
+                </div>
+              ) : searchError ? (
+                <div role="alert" className="px-3 py-2 text-xs" style={{ color: 'var(--sem-danger-text)' }}>
+                  {searchError}
+                </div>
+              ) : searchResults.length === 0 ? (
+                <div role="status" className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Ничего не найдено.
+                </div>
+              ) : (
+                searchResults.map((r) => (
+                  <button
+                    key={r.documentId}
+                    type="button"
+                    onClick={() => {
+                      if (changeDocument(r.documentId)) setSearchQuery('');
+                    }}
+                    className="nav-item flex w-full items-center gap-2 px-3 py-2 text-left text-[13px]"
+                  >
+                    <FileText className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                    <span className="truncate">{r.title}</span>
+                  </button>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -567,16 +857,13 @@ export function WorkspaceShell() {
       {/* Workspace Navigation */}
       <nav
         aria-label="Разделы рабочего пространства"
-        className="space-y-0.5 border-b p-2 text-xs"
+        className="space-y-0.5 border-b p-2 text-[13px]"
         style={{ borderColor: 'var(--border-default)' }}
       >
         <button
           type="button"
           aria-current={activeTab === 'inbox' ? 'page' : undefined}
-          onClick={() => {
-            setActiveTab('inbox');
-            setMobileMenuOpen(false);
-          }}
+          onClick={() => changeTab('inbox')}
           className="nav-item flex w-full items-center justify-between rounded-md px-2.5 py-1.5 font-medium"
           style={{
             backgroundColor: activeTab === 'inbox' ? 'var(--accent-primary-soft)' : undefined,
@@ -603,10 +890,7 @@ export function WorkspaceShell() {
         <button
           type="button"
           aria-current={activeTab === 'agents' ? 'page' : undefined}
-          onClick={() => {
-            setActiveTab('agents');
-            setMobileMenuOpen(false);
-          }}
+          onClick={() => changeTab('agents')}
           className="nav-item flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 font-medium"
           style={{
             backgroundColor: activeTab === 'agents' ? 'var(--accent-primary-soft)' : undefined,
@@ -621,10 +905,7 @@ export function WorkspaceShell() {
           <button
             type="button"
             aria-current={activeTab === 'settings' ? 'page' : undefined}
-            onClick={() => {
-              setActiveTab('settings');
-              setMobileMenuOpen(false);
-            }}
+            onClick={() => changeTab('settings')}
             className="nav-item flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 font-medium"
             style={{
               backgroundColor:
@@ -648,16 +929,13 @@ export function WorkspaceShell() {
             Страницы
           </span>
           {canEdit && (
-            <button
-              type="button"
+            <IconButton
               onClick={() => setCreatingDoc((v) => !v)}
-              className="nav-item rounded p-0.5"
+              label="Новая страница"
               style={{ color: 'var(--text-secondary)' }}
-              aria-label="Новая страница"
-              title="Новая страница"
             >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+              <Plus className="h-4 w-4" strokeWidth={1.75} />
+            </IconButton>
           )}
         </div>
 
@@ -676,7 +954,7 @@ export function WorkspaceShell() {
                 color: 'var(--text-primary)',
               }}
             />
-            <button type="submit" className="btn-primary rounded px-2 py-1 text-xs font-medium">
+            <button type="submit" className="btn-primary rounded px-2 py-1 text-[13px] font-medium">
               OK
             </button>
           </form>
@@ -690,12 +968,8 @@ export function WorkspaceShell() {
                 key={doc.id}
                 type="button"
                 aria-current={isSelected ? 'page' : undefined}
-                onClick={() => {
-                  setActiveDocId(doc.id);
-                  setActiveTab('doc');
-                  setMobileMenuOpen(false);
-                }}
-                className="nav-item flex w-full items-center justify-between rounded-md py-1.5 pr-2 text-left text-xs"
+                onClick={() => changeDocument(doc.id)}
+                className="nav-item flex w-full items-center justify-between rounded-md py-1.5 pr-2 text-left text-[13px]"
                 style={{
                   paddingLeft: `${0.5 + Math.min(depth, 5) * 0.9}rem`,
                   backgroundColor: isSelected ? 'var(--accent-primary-soft)' : undefined,
@@ -704,11 +978,8 @@ export function WorkspaceShell() {
                 }}
               >
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />
-                  <span className="truncate">
-                    {doc.icon ? `${doc.icon} ` : ''}
-                    {doc.title}
-                  </span>
+                  <DocumentIcon icon={doc.icon} className="h-4 w-4 shrink-0 opacity-60" />
+                  <span className="truncate">{doc.title}</span>
                 </span>
                 {doc.pendingProposalsCount > 0 && (
                   <span
@@ -738,29 +1009,33 @@ export function WorkspaceShell() {
             {user.email}
           </div>
         </div>
-        <button
-          type="button"
+        <IconButton
           onClick={() => void handleLogout()}
-          className="nav-item rounded p-1.5"
-          style={{ color: 'var(--text-secondary)' }}
-          aria-label="Выйти из аккаунта"
+          label="Выйти из аккаунта"
           title="Выйти"
+          style={{ color: 'var(--text-secondary)' }}
         >
-          <LogOut className="h-3.5 w-3.5" />
-        </button>
+          <LogOut className="h-4 w-4" strokeWidth={1.75} />
+        </IconButton>
       </div>
     </aside>
   );
 
   return (
-    <div className="flex min-h-screen" style={{ backgroundColor: 'var(--bg-canvas)' }}>
+    <div className="flex h-dvh overflow-hidden" style={{ backgroundColor: 'var(--bg-canvas)' }}>
       {/* Desktop sidebar */}
-      <div className="hidden md:flex">{sidebarContent}</div>
+      <div className="hidden md:flex">{renderSidebar(false)}</div>
 
       {/* Mobile slide-over drawer */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-40 flex md:hidden">
-          <div className="relative z-10 flex h-full">{sidebarContent}</div>
+        <div
+          ref={drawerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Навигация по рабочему пространству"
+          className="fixed inset-0 z-40 flex md:hidden"
+        >
+          <div className="relative z-10 flex h-full">{renderSidebar(true)}</div>
           <button
             type="button"
             aria-label="Закрыть навигацию"
@@ -771,24 +1046,23 @@ export function WorkspaceShell() {
       )}
 
       {/* Main Content Area */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header
-          className="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4 text-xs sm:px-5"
+          className="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4 text-[13px] sm:px-5"
           style={{
             backgroundColor: 'var(--bg-surface)',
             borderColor: 'var(--border-default)',
           }}
         >
           <div className="flex min-w-0 items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-            <button
-              type="button"
+            <IconButton
               onClick={() => setMobileMenuOpen(true)}
-              className="nav-item rounded p-1.5 md:hidden"
+              className="md:hidden"
+              label="Открыть навигацию"
               style={{ color: 'var(--text-primary)' }}
-              aria-label="Открыть навигацию"
             >
-              <Menu className="h-4 w-4" />
-            </button>
+              <Menu className="h-4 w-4" strokeWidth={1.75} />
+            </IconButton>
             <span className="truncate font-medium" style={{ color: 'var(--text-primary)' }}>
               {activeProjectEntry?.project.name ?? 'Docalaizer'}
             </span>
@@ -824,8 +1098,11 @@ export function WorkspaceShell() {
               {canEdit && (
                 <button
                   type="button"
-                  onClick={() => setEditing(true)}
-                  className="btn-primary inline-flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium"
+                  onClick={() => {
+                    setEditorDirty(false);
+                    setEditing(true);
+                  }}
+                  className="btn-primary inline-flex items-center gap-1 rounded-md px-3 py-1 text-[13px] font-medium"
                 >
                   <Edit3 className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Редактировать</span>
@@ -835,7 +1112,10 @@ export function WorkspaceShell() {
           )}
         </header>
 
-        <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+        <main
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8"
+          aria-busy={activeTab === 'doc' && loadingDoc}
+        >
           {activeTab === 'inbox' ? (
             <InboxView
               projectId={activeProjectId ?? undefined}
@@ -856,7 +1136,7 @@ export function WorkspaceShell() {
               {settingsError && (
                 <div
                   role="alert"
-                  className="rounded-lg border px-3.5 py-2.5 text-xs"
+                  className="rounded-lg border px-3.5 py-2.5 text-sm"
                   style={{
                     backgroundColor: 'var(--sem-danger-bg)',
                     borderColor: 'var(--sem-danger-border)',
@@ -866,6 +1146,102 @@ export function WorkspaceShell() {
                   {settingsError}
                 </div>
               )}
+
+              {settingsSuccess && (
+                <div
+                  role="status"
+                  className="rounded-lg border px-3.5 py-2.5 text-sm"
+                  style={{
+                    backgroundColor: 'var(--sem-clean-bg)',
+                    borderColor: 'var(--sem-clean-border)',
+                    color: 'var(--sem-clean-text)',
+                  }}
+                >
+                  {settingsSuccess}
+                </div>
+              )}
+
+              <form
+                onSubmit={(e) => void handleUpdateProjectDetails(e)}
+                className="space-y-4 rounded-xl border p-5"
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  borderColor: 'var(--border-default)',
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                    style={{
+                      backgroundColor: 'var(--accent-primary-soft)',
+                      color: 'var(--accent-primary)',
+                    }}
+                  >
+                    <ProjectIcon icon={projectIcon} className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold">Название и иконка</h2>
+                    <p className="mt-0.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      Эти настройки видны всем участникам проекта.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="project-name"
+                    className="mb-1.5 block text-xs font-medium"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Название проекта
+                  </label>
+                  <input
+                    id="project-name"
+                    type="text"
+                    required
+                    maxLength={140}
+                    disabled={activeProjectEntry.role !== 'owner' || savingProject}
+                    value={projectName}
+                    onChange={(e) => {
+                      setProjectName(e.target.value);
+                      setSettingsSuccess(null);
+                    }}
+                    className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-60"
+                    style={{
+                      backgroundColor: 'var(--bg-subtle)',
+                      borderColor: 'var(--border-default)',
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                </div>
+
+                <IconPicker
+                  label="Иконка проекта"
+                  value={projectIcon}
+                  disabled={activeProjectEntry.role !== 'owner' || savingProject}
+                  onChange={(value) => {
+                    setProjectIcon(value);
+                    setSettingsSuccess(null);
+                  }}
+                />
+
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {activeProjectEntry.role === 'owner'
+                      ? 'Slug проекта останется прежним.'
+                      : 'Изменять проект может только владелец.'}
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={
+                      activeProjectEntry.role !== 'owner' || savingProject || !projectName.trim()
+                    }
+                    className="btn-primary shrink-0 rounded-md px-3.5 py-2 text-[13px] font-medium disabled:opacity-60"
+                  >
+                    {savingProject ? 'Сохранение…' : 'Сохранить'}
+                  </button>
+                </div>
+              </form>
 
               <div
                 className="space-y-3 rounded-xl border p-5"
@@ -951,7 +1327,7 @@ export function WorkspaceShell() {
                     </select>
                     <button
                       type="submit"
-                      className="btn-primary inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium"
+                      className="btn-primary inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-[13px] font-medium"
                     >
                       <UserPlus className="h-3.5 w-3.5" />
                       Добавить
@@ -997,15 +1373,13 @@ export function WorkspaceShell() {
                                 </option>
                               ))}
                             </select>
-                            <button
-                              type="button"
+                            <IconButton
                               onClick={() => void handleRemoveMember(m.userId)}
-                              className="rounded p-1"
+                              label={`Удалить ${m.email}`}
                               style={{ color: 'var(--sem-danger-text)' }}
-                              aria-label={`Удалить ${m.email}`}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                            </IconButton>
                           </>
                         ) : (
                           <span
@@ -1026,6 +1400,26 @@ export function WorkspaceShell() {
             </div>
           ) : docDetail ? (
             <div className="mx-auto max-w-4xl">
+              {docError && !editing && (
+                <div
+                  role="alert"
+                  className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3.5 py-2.5 text-sm"
+                  style={{
+                    backgroundColor: 'var(--sem-danger-bg)',
+                    borderColor: 'var(--sem-danger-border)',
+                    color: 'var(--sem-danger-text)',
+                  }}
+                >
+                  <span>{docError}</span>
+                  <button
+                    type="button"
+                    onClick={() => void loadDoc(docDetail.document.id)}
+                    className="btn-secondary rounded-md px-2.5 py-1 text-[13px] font-medium"
+                  >
+                    Повторить
+                  </button>
+                </div>
+              )}
               {showHistory && (
                 <div
                   className="mb-6 space-y-3 rounded-xl border p-4"
@@ -1157,16 +1551,24 @@ export function WorkspaceShell() {
               {editing ? (
                 <DocumentEditor
                   initialTitle={docDetail.document.title}
+                  initialIcon={docDetail.document.icon}
                   initialBlocks={docDetail.headRevision?.blocksSnapshot ?? []}
                   saving={savingDoc}
                   error={docError}
                   isConflictError={isConflictError}
+                  onDirtyChange={setEditorDirty}
                   onReloadDoc={() => {
-                    void loadDoc(docDetail.document.id).then(() => setEditing(false));
+                    if (!confirmDiscardChanges()) return;
+                    void loadDoc(docDetail.document.id).then((loaded) => {
+                      if (!loaded) return;
+                      setEditing(false);
+                      setEditorDirty(false);
+                    });
                   }}
                   onSave={handleSaveDoc}
                   onCancel={() => {
                     setEditing(false);
+                    setEditorDirty(false);
                     setDocError(null);
                     setIsConflictError(false);
                   }}
@@ -1179,10 +1581,15 @@ export function WorkspaceShell() {
                     borderColor: 'var(--border-default)',
                   }}
                 >
-                  <h1 className="mb-6 text-2xl font-bold tracking-tight sm:text-3xl">
-                    {docDetail.document.icon ? `${docDetail.document.icon} ` : ''}
-                    {docDetail.document.title}
-                  </h1>
+                  <div className="mb-6 flex items-start gap-3">
+                    <DocumentIcon
+                      icon={docDetail.document.icon}
+                      className="mt-1 h-6 w-6 shrink-0 sm:mt-1.5"
+                    />
+                    <h1 className="min-w-0 text-2xl font-bold tracking-tight sm:text-3xl">
+                      {docDetail.document.title}
+                    </h1>
+                  </div>
                   <div className="space-y-4">
                     {(docDetail.headRevision?.blocksSnapshot ?? []).map((block) => (
                       <DocumentBlockCard
@@ -1197,6 +1604,43 @@ export function WorkspaceShell() {
                 </div>
               )}
             </div>
+          ) : loadingDoc ? (
+            <div
+              className="mx-auto max-w-4xl space-y-4 rounded-xl border p-6 sm:p-8"
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                borderColor: 'var(--border-default)',
+              }}
+              aria-label="Загрузка документа"
+              aria-busy="true"
+            >
+              <div className="h-8 w-2/3 rounded-md" style={{ backgroundColor: 'var(--bg-subtle)' }} />
+              <div className="h-4 w-full rounded" style={{ backgroundColor: 'var(--bg-subtle)' }} />
+              <div className="h-4 w-11/12 rounded" style={{ backgroundColor: 'var(--bg-subtle)' }} />
+              <div className="h-4 w-4/5 rounded" style={{ backgroundColor: 'var(--bg-subtle)' }} />
+            </div>
+          ) : docError ? (
+            <div
+              role="alert"
+              className="mx-auto max-w-lg rounded-xl border p-8 text-center"
+              style={{
+                backgroundColor: 'var(--sem-danger-bg)',
+                borderColor: 'var(--sem-danger-border)',
+                color: 'var(--sem-danger-text)',
+              }}
+            >
+              <div className="text-sm font-medium">Не удалось загрузить страницу</div>
+              <p className="mt-2 text-sm">{docError}</p>
+              {activeDocId && (
+                <button
+                  type="button"
+                  onClick={() => void loadDoc(activeDocId)}
+                  className="btn-secondary mt-4 rounded-md px-3 py-1.5 text-sm font-medium"
+                >
+                  Повторить загрузку
+                </button>
+              )}
+            </div>
           ) : (
             <div
               className="mx-auto max-w-lg rounded-xl border p-10 text-center"
@@ -1207,7 +1651,7 @@ export function WorkspaceShell() {
             >
               <FileText className="mx-auto mb-3 h-8 w-8" style={{ color: 'var(--text-muted)' }} />
               <div className="text-sm font-medium">Выберите или создайте страницу</div>
-              <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
                 Создайте первую страницу в сайдбаре слева или подключите AI-агента через MCP.
               </p>
             </div>

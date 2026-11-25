@@ -5,15 +5,30 @@ import { Plus, Trash2, Save, X, ArrowUp, ArrowDown, RefreshCw } from 'lucide-rea
 import type { DocumentBlock, ProposalBlockPayload } from '@docalaizer/core';
 import { MermaidView } from '../visualizations/mermaid-view';
 import { VegaChartView } from '../visualizations/vega-chart-view';
+import { IconButton } from '../ui/icon-button';
+import { IconPicker } from '../ui/icon-picker';
+import {
+  DocumentIcon,
+  getEntityIconLabel,
+  normalizeDocumentIcon,
+  type EntityIconKey,
+} from '../ui/entity-icon';
 
 interface DocumentEditorProps {
   initialTitle: string;
+  initialIcon: string | null;
   initialBlocks: DocumentBlock[];
   saving: boolean;
   error: string | null;
   isConflictError?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
   onReloadDoc?: () => void;
-  onSave: (title: string, blocks: ProposalBlockPayload[], summary: string) => Promise<void>;
+  onSave: (
+    title: string,
+    icon: EntityIconKey,
+    blocks: ProposalBlockPayload[],
+    summary: string,
+  ) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -68,21 +83,28 @@ function toDraftBlock(block: DocumentBlock, idx: number): DraftBlock {
 
 export function DocumentEditor({
   initialTitle,
+  initialIcon,
   initialBlocks,
   saving,
   error,
   isConflictError = false,
+  onDirtyChange,
   onReloadDoc,
   onSave,
   onCancel,
 }: DocumentEditorProps) {
   const [title, setTitle] = useState(initialTitle);
+  const [icon, setIcon] = useState<EntityIconKey>(() => normalizeDocumentIcon(initialIcon));
   const [summary, setSummary] = useState('');
   const [drafts, setDrafts] = useState<DraftBlock[]>(() =>
     initialBlocks.map((b, i) => toDraftBlock(b, i)),
   );
   const [isDirty, setIsDirty] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   useEffect(() => {
     if (!isDirty) return;
@@ -113,7 +135,12 @@ export function DocumentEditor({
       key,
       type,
       title: type === 'diagram' ? 'Новая диаграмма' : type === 'chart' ? 'Новый график' : '',
-      markdownText: type === 'markdown' ? '## Новый раздел\n\nТекст раздела…' : 'Важное замечание…',
+      markdownText:
+        type === 'markdown'
+          ? '## Новый раздел\n\nТекст раздела…'
+          : type === 'table'
+            ? '| Колонка 1 | Колонка 2 |\n| --- | --- |\n| Значение 1 | Значение 2 |'
+            : 'Важное замечание…',
       mermaidSource: 'flowchart LR\n  Client --> API --> DB[(PostgreSQL)]',
       vegaJson: JSON.stringify(
         {
@@ -220,7 +247,7 @@ export function DocumentEditor({
       }
     }
 
-    await onSave(title.trim() || initialTitle, payloads, summary.trim() || 'Ручная правка');
+    await onSave(title.trim() || initialTitle, icon, payloads, summary.trim() || 'Ручная правка');
   };
 
   return (
@@ -248,7 +275,10 @@ export function DocumentEditor({
           <input
             type="text"
             value={summary}
-            onChange={(e) => setSummary(e.target.value)}
+            onChange={(e) => {
+              setIsDirty(true);
+              setSummary(e.target.value);
+            }}
             placeholder="Комментарий к ревизии…"
             aria-label="Комментарий к ревизии"
             className="hidden w-52 rounded-md border px-2.5 py-1 text-xs sm:block"
@@ -278,6 +308,30 @@ export function DocumentEditor({
           </button>
         </div>
       </div>
+
+      <details
+        className="rounded-lg border"
+        style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}
+      >
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-3 text-xs font-medium">
+          <DocumentIcon icon={icon} className="h-4 w-4" />
+          <span>Иконка страницы</span>
+          <span className="font-normal" style={{ color: 'var(--text-secondary)' }}>
+            {getEntityIconLabel(icon)}
+          </span>
+        </summary>
+        <div className="border-t p-3.5" style={{ borderColor: 'var(--border-default)' }}>
+          <IconPicker
+            label="Выберите иконку страницы"
+            value={icon}
+            disabled={saving}
+            onChange={(value) => {
+              setIsDirty(true);
+              setIcon(value);
+            }}
+          />
+        </div>
+      </details>
 
       {(localError || error) && (
         <div
@@ -331,35 +385,29 @@ export function DocumentEditor({
                 )}
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
+                <IconButton
                   onClick={() => moveBlock(idx, -1)}
                   disabled={idx === 0}
-                  className="rounded p-1 disabled:opacity-30"
+                  label="Переместить блок вверх"
                   style={{ color: 'var(--text-secondary)' }}
-                  aria-label="Переместить вверх"
                 >
-                  <ArrowUp className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
+                  <ArrowUp className="h-4 w-4" strokeWidth={1.75} />
+                </IconButton>
+                <IconButton
                   onClick={() => moveBlock(idx, 1)}
                   disabled={idx === drafts.length - 1}
-                  className="rounded p-1 disabled:opacity-30"
+                  label="Переместить блок вниз"
                   style={{ color: 'var(--text-secondary)' }}
-                  aria-label="Переместить вниз"
                 >
-                  <ArrowDown className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
+                  <ArrowDown className="h-4 w-4" strokeWidth={1.75} />
+                </IconButton>
+                <IconButton
                   onClick={() => removeBlock(idx)}
-                  className="rounded p-1"
+                  label="Удалить блок"
                   style={{ color: 'var(--sem-danger-text)' }}
-                  aria-label="Удалить блок"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                  <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                </IconButton>
               </div>
             </div>
 
@@ -369,6 +417,7 @@ export function DocumentEditor({
                 value={d.title}
                 onChange={(e) => updateDraft(idx, { title: e.target.value })}
                 placeholder="Название блока…"
+                aria-label={`Название блока ${idx + 1}`}
                 className="mb-2 w-full rounded-md border px-2.5 py-1.5 text-xs"
                 style={{
                   backgroundColor: 'var(--bg-subtle)',
@@ -382,6 +431,7 @@ export function DocumentEditor({
               <div className="space-y-2">
                 {d.type === 'callout' && (
                   <select
+                    aria-label={`Тип заметки ${idx + 1}`}
                     value={d.calloutVariant}
                     onChange={(e) =>
                       updateDraft(idx, {
@@ -402,6 +452,7 @@ export function DocumentEditor({
                   </select>
                 )}
                 <textarea
+                  aria-label={`Содержимое блока ${idx + 1}`}
                   value={d.markdownText}
                   onChange={(e) => updateDraft(idx, { markdownText: e.target.value })}
                   rows={Math.max(4, Math.min(14, d.markdownText.split('\n').length + 1))}
@@ -416,6 +467,7 @@ export function DocumentEditor({
             ) : d.type === 'diagram' ? (
               <div className="grid gap-3 lg:grid-cols-2">
                 <textarea
+                  aria-label={`Содержимое блока ${idx + 1}`}
                   value={d.mermaidSource}
                   onChange={(e) => updateDraft(idx, { mermaidSource: e.target.value })}
                   rows={8}
@@ -431,6 +483,7 @@ export function DocumentEditor({
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
                 <textarea
+                  aria-label={`Содержимое блока ${idx + 1}`}
                   value={d.vegaJson}
                   onChange={(e) => updateDraft(idx, { vegaJson: e.target.value })}
                   rows={10}
@@ -458,6 +511,7 @@ export function DocumentEditor({
         {(
           [
             ['markdown', 'Markdown'],
+            ['table', 'Таблица'],
             ['diagram', 'Mermaid диаграмма'],
             ['chart', 'Vega-Lite график'],
             ['callout', 'Callout / ADR'],

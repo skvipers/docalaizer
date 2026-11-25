@@ -1,4 +1,4 @@
-import { and, count, eq, gt } from 'drizzle-orm';
+import { and, count, eq, gt, sql } from 'drizzle-orm';
 import { type Database, type GlobalRole, sessions, users } from '@docalaizer/db';
 import { AppError, isPgUniqueViolation } from '../errors';
 import {
@@ -33,15 +33,11 @@ export async function registerUser(
   },
 ): Promise<AuthSessionResult> {
   const normalizedEmail = params.email.trim().toLowerCase();
+  if (normalizedEmail.endsWith('@locugard.invalid')) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'This email domain is reserved for LocuGard accounts.');
+  }
   if (params.password.length < 8) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Password must be at least 8 characters long.');
-  }
-
-  const [countRow] = await db.select({ total: count() }).from(users);
-  const isFirstUser = Number(countRow?.total ?? 0) === 0;
-
-  if (!isFirstUser && !params.allowPublicSignup) {
-    throw new AppError(403, 'SIGNUP_DISABLED', 'Public registration is disabled on this server.');
   }
 
   const passwordHash = hashPassword(params.password);
@@ -50,6 +46,16 @@ export async function registerUser(
 
   try {
     const created = await db.transaction(async (tx) => {
+      // Serialize first-user admin bootstrap across concurrent requests
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(742918341)`);
+
+      const [countRow] = await tx.select({ total: count() }).from(users);
+      const isFirstUser = Number(countRow?.total ?? 0) === 0;
+
+      if (!isFirstUser && !params.allowPublicSignup) {
+        throw new AppError(403, 'SIGNUP_DISABLED', 'Public registration is disabled on this server.');
+      }
+
       const [user] = await tx
         .insert(users)
         .values({

@@ -9,10 +9,14 @@ dist/
 coverage/
 *.tsbuildinfo
 
-# Environment
+# Environment & local secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.log
 
 # OS / IDE
 .DS_Store

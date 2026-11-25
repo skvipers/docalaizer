@@ -86,6 +86,18 @@ export function classifyOperationConflict(
   const headById = new Map(headBlocks.map((b) => [b.id, b]));
 
   if (op.opType === 'insert') {
+    const insertedId = op.newBlockPayload.id;
+    if (insertedId && (headById.has(insertedId) || pendingInsertedIds.has(insertedId))) {
+      return {
+        op,
+        conflictState: 'stale_conflict',
+        defaultDecision: 'rejected',
+        canApply: false,
+        reasons: [`Inserted block ID "${insertedId}" already exists in this proposal or head revision.`],
+        baseBlock: null,
+        headBlock: headById.get(insertedId) ?? null,
+      };
+    }
     if (
       op.afterBlockId !== null &&
       !headById.has(op.afterBlockId) &&
@@ -364,6 +376,12 @@ export function applyProposalReview(params: {
           validation.details,
         );
       }
+      if (payload.id && working.some((block) => block.id === payload.id)) {
+        throw new CoreMergeError(
+          'DUPLICATE_BLOCK_ID',
+          `Cannot insert duplicate block ID "${payload.id}" in operation #${i}.`,
+        );
+      }
 
       const created = createDocumentBlock({
         payload,
@@ -500,6 +518,17 @@ export function mergeHumanEdit(params: {
   now?: string;
 }): HumanMergeResult {
   const timestamp = params.now ?? new Date().toISOString();
+  const proposedIds = new Set<string>();
+  for (const proposed of params.proposedBlocks) {
+    if (!proposed.id) continue;
+    if (proposedIds.has(proposed.id)) {
+      throw new CoreMergeError(
+        'DUPLICATE_BLOCK_ID',
+        `Proposed blocks contain duplicate block ID "${proposed.id}".`,
+      );
+    }
+    proposedIds.add(proposed.id);
+  }
   const baseById = new Map(params.baseBlocks.map((b) => [b.id, b]));
   const headById = new Map(params.headBlocks.map((b) => [b.id, b]));
   const proposedById = new Map<string, ProposalBlockPayload>();

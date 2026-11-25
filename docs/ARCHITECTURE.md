@@ -88,7 +88,7 @@ docalaizer/
 
 ## 4. Иерархия сущностей (Confluence / Coda модель)
 
-1. **User (Пользователь)**: аккаунт человека (email/пароль или OAuth; при первом запуске в self-hosted режиме можно создать первого admin-пользователя).
+1. **User (Пользователь)**: аккаунт человека (email/пароль или WebAuthn/passkey через LocuGard; при первом запуске в self-hosted режиме можно создать первого admin-пользователя).
 2. **Project (Проект)**: изолированное пространство для одного продукта, сервиса или направления (например, *«Docalaizer»*, *«Billing Service»*, *«Личная база знаний»*).
    - Содержит настройки политики аппрувов по умолчанию (`strict` / `protect_human` / `auto_new_docs`).
    - Имеет список участников с ролями (`owner`, `editor`, `reviewer`, `viewer`).
@@ -327,7 +327,7 @@ erDiagram
 
 ## 8. Безопасность, аудит и Self-Hosting
 
-- **Аутентификация пользователей**: Better Auth (или JWT/сессии в HttpOnly cookies) с поддержкой email+password и опциональным OAuth (GitHub/Google) для публичного инстанса.
+- **Аутентификация пользователей**: сессии в HttpOnly cookies с поддержкой email+password и опционального WebAuthn/passkey через LocuGard v0.1.0. Внешняя сессия LocuGard перепроверяется на каждом запросе; внешний аккаунт получает локальную роль `member`, а не автоматический `admin`.
 - **Self-hosted режим**: настройка через `.env` (`ALLOW_PUBLIC_SIGNUP=false` для личного использования, `true` — для открытого доступа).
 - **XSS-защита**: санитизация Markdown (`rehype-sanitize`), Mermaid `securityLevel: 'strict'`, декларативный Vega-Lite без произвольного JS, строгий CSP.
 - **Защита от гонок**: обновление `documents.head_revision_id` выполняется в транзакции с оптимистичной проверкой (`WHERE id = $1 AND head_revision_id = $2`).

@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useEffect, useId, useState } from 'react';
-import { AlertTriangle, Code2, Eye } from 'lucide-react';
+import { AlertTriangle, Code2, Eye, Maximize2, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useTheme } from '../theme-provider';
 
 interface MermaidViewProps {
@@ -22,6 +22,17 @@ export const MermaidView = memo(function MermaidView({
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fullscreen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,16 +88,32 @@ export const MermaidView = memo(function MermaidView({
         }}
       >
         <span className="truncate font-medium" style={{ color: 'var(--text-primary)' }}>
-          {title ? `${title} · Mermaid` : 'Mermaid Diagram'}
+          {title ? `${title} · Mermaid` : 'Диаграмма Mermaid'}
         </span>
-        <button
-          type="button"
-          onClick={() => setShowCode((v) => !v)}
-          className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
-        >
-          {showCode ? <Eye className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
-          {showCode ? 'Диаграмма' : 'Код'}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {svg && !showCode && (
+            <button
+              type="button"
+              onClick={() => {
+                setZoom(1);
+                setFullscreen(true);
+              }}
+              aria-label="Развернуть диаграмму"
+              className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              Во весь экран
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowCode((v) => !v)}
+            className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
+          >
+            {showCode ? <Eye className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
+            {showCode ? 'Диаграмма' : 'Код'}
+          </button>
+        </div>
       </div>
 
       {showCode ? (
@@ -134,6 +161,84 @@ export const MermaidView = memo(function MermaidView({
           }}
         >
           {caption}
+        </div>
+      )}
+
+      {fullscreen && svg && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={title ? `${title} — просмотр диаграммы` : 'Просмотр диаграммы Mermaid'}
+          className="fixed inset-0 z-50 flex flex-col p-4 sm:p-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.72)' }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setFullscreen(false);
+          }}
+        >
+          <div
+            className="flex h-full flex-col overflow-hidden rounded-xl border"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--border-default)',
+            }}
+          >
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5 text-xs"
+              style={{
+                backgroundColor: 'var(--bg-subtle)',
+                borderColor: 'var(--border-default)',
+              }}
+            >
+              <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {title ? `${title} · Mermaid` : 'Диаграмма Mermaid'}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+                  aria-label="Уменьшить"
+                  className="btn-secondary inline-flex items-center rounded p-1.5"
+                >
+                  <ZoomOut className="h-3.5 w-3.5" />
+                </button>
+                <span className="min-w-[44px] text-center font-mono text-[11px]">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))}
+                  aria-label="Увеличить"
+                  className="btn-secondary inline-flex items-center rounded p-1.5"
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoom(1)}
+                  aria-label="Сбросить масштаб"
+                  className="btn-secondary inline-flex items-center rounded p-1.5"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFullscreen(false)}
+                  aria-label="Закрыть полноэкранный просмотр"
+                  className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-1 text-xs"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Закрыть
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <div
+                className="mx-auto flex w-fit origin-top justify-center transition-transform"
+                style={{ transform: `scale(${zoom})` }}
+                dangerouslySetInnerHTML={{ __html: svg }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

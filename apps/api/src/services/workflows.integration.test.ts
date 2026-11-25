@@ -34,8 +34,10 @@ import {
   createProjectAsUser,
   revokeAgentToken,
 } from './rbac.service';
+import { upsertProjectMember } from './project.service';
 
 const DATABASE_URL =
+  process.env.TEST_DATABASE_URL ??
   process.env.DATABASE_URL ??
   'postgresql://docalaizer:docalaizer_dev@localhost:5439/docalaizer';
 
@@ -308,6 +310,7 @@ describe('Auth, RBAC, and transactional Proposal workflows (live PostgreSQL)', (
       docId,
       baseRevisionId: rev2.id,
       title: 'Refresh AI metrics section',
+      idempotencyKey: `auto-${suffix}`,
       ops: [
         {
           opType: 'update',
@@ -324,6 +327,17 @@ describe('Auth, RBAC, and transactional Proposal workflows (live PostgreSQL)', (
     if (aiClean.status !== 'applied') return;
     const rev3 = aiClean.revision;
     expect(rev3.revisionNumber).toBe(3);
+    expect(rev3.proposalId).toBeTruthy();
+
+    const autoReplay = await createProposalAsAgent(db, {
+      agent,
+      docId,
+      baseRevisionId: rev2.id,
+      title: 'Refresh AI metrics section',
+      idempotencyKey: `auto-${suffix}`,
+      ops: [],
+    });
+    expect(autoReplay).toMatchObject({ status: 'applied', revision: { id: rev3.id } });
 
     // 5. AI tries to touch humanTouched block + insert valid chart -> MUST become pending Proposal!
     const propResult = await createProposalAsAgent(db, {
@@ -567,5 +581,72 @@ describe('Auth, RBAC, and transactional Proposal workflows (live PostgreSQL)', (
     expect(save2.revision.revisionNumber).toBe(3);
     expect(save2.revision.blocksSnapshot[0]?.content).toBe('Section 1 updated by tab 2');
     expect(save2.revision.blocksSnapshot[1]?.content).toBe('Section 2 updated by tab 1');
+  });
+
+  it('enforces same-project parentId, last-owner protection, DB healthcheck, security headers, and rate limiting', async () => {
+    const suffix = randomUUID().slice(0, 8);
+    const { user } = await registerUser(db, {
+      email: `sec-${suffix}@example.com`,
+      name: 'Security Owner',
+      password: 'password123',
+      allowPublicSignup: true,
+    });
+    createdUserIds.push(user.id);
+
+    const projA = await createProjectAsUser(db, {
+      userId: user.id,
+      name: 'Project A',
+      slug: `proj-a-${suffix}`,
+    });
+    const projB = await createProjectAsUser(db, {
+      userId: user.id,
+      name: 'Project B',
+      slug: `proj-b-${suffix}`,
+    });
+    createdProjectIds.push(projA.id, projB.id);
+
+    const { document: docInA } = await createDocumentAsHuman(db, {
+      userId: user.id,
+      projectId: projA.id,
+      slug: 'parent-a',
+      title: 'Parent in A',
+      blocks: [],
+    });
+
+    // Cross-project parentId must be rejected
+    await expect(
+      createDocumentAsHuman(db, {
+        userId: user.id,
+        projectId: projB.id,
+        parentId: docInA.id,
+        slug: 'child-cross',
+        title: 'Cross-project child',
+        blocks: [],
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+
+    // Last owner cannot be demoted
+    await expect(
+      upsertProjectMember(db, user.id, projA.id, { userId: user.id, role: 'editor' }),
+    ).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+
+    // DB healthcheck + security headers
+    const app = createApp({ db, allowPublicSignup: false });
+    const healthRes = await app.request('/health');
+    expect(healthRes.status).toBe(200);
+    expect(await healthRes.json()).toMatchObject({ status: 'ok', db: 'ok' });
+    expect(healthRes.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(healthRes.headers.get('x-frame-options')).toBe('DENY');
+    expect(healthRes.headers.get('content-security-policy')).toContain("default-src 'none'");
+
+    // Auth rate limit triggers 429 after 30 requests from same IP
+    let lastStatus = 0;
+    for (let i = 0; i < 31; i++) {
+      const res = await app.request('/api/v1/auth/providers', {
+        headers: { 'x-forwarded-for': `10.99.0.${suffix.charCodeAt(0) % 200}` },
+      });
+      lastStatus = res.status;
+    }
+    expect(lastStatus).toBe(429);
   });
 });

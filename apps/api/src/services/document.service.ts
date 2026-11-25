@@ -56,6 +56,21 @@ export async function createDocumentAsHuman(
   await assertProjectRole(db, params.userId, params.projectId, ['owner', 'editor']);
   validateAllBlockPayloads(params.blocks);
 
+  if (params.parentId) {
+    const [parentDoc] = await db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(eq(documents.id, params.parentId), eq(documents.projectId, params.projectId)))
+      .limit(1);
+    if (!parentDoc) {
+      throw new AppError(
+        404,
+        'NOT_FOUND',
+        'Parent document not found in this project.',
+      );
+    }
+  }
+
   const now = new Date().toISOString();
   const createdBlocks: DocumentBlock[] = params.blocks.map((payload) =>
     createDocumentBlock({
@@ -151,7 +166,8 @@ export async function updateDocumentAsHuman(
 
   await assertProjectRole(db, params.userId, initialDoc.projectId, ['owner', 'editor']);
 
-  return db.transaction(async (tx) => {
+  try {
+    return await db.transaction(async (tx) => {
     const [doc] = await tx
       .select()
       .from(documents)
@@ -257,7 +273,17 @@ export async function updateDocumentAsHuman(
     }
 
     return { document: updatedDoc, revision: nextRev };
-  });
+    });
+  } catch (err) {
+    if (isPgUniqueViolation(err)) {
+      throw new AppError(
+        409,
+        ERROR_CODES.HEAD_REVISION_CONFLICT,
+        'Document was modified concurrently; please retry.',
+      );
+    }
+    throw err;
+  }
 }
 
 export async function updateBlockProtection(
@@ -283,7 +309,8 @@ export async function updateBlockProtection(
 
   await assertProjectRole(db, params.userId, initialDoc.projectId, ['owner', 'editor']);
 
-  return db.transaction(async (tx) => {
+  try {
+    return await db.transaction(async (tx) => {
     const [doc] = await tx
       .select()
       .from(documents)
@@ -358,7 +385,17 @@ export async function updateBlockProtection(
     }
 
     return { document: updatedDoc, revision: nextRev };
-  });
+    });
+  } catch (err) {
+    if (isPgUniqueViolation(err)) {
+      throw new AppError(
+        409,
+        ERROR_CODES.HEAD_REVISION_CONFLICT,
+        'Document was modified concurrently; please retry.',
+      );
+    }
+    throw err;
+  }
 }
 
 export async function rollbackDocument(
@@ -383,7 +420,8 @@ export async function rollbackDocument(
 
   await assertProjectRole(db, params.userId, initialDoc.projectId, ['owner', 'editor']);
 
-  return db.transaction(async (tx) => {
+  try {
+    return await db.transaction(async (tx) => {
     const [doc] = await tx
       .select()
       .from(documents)
@@ -469,7 +507,17 @@ export async function rollbackDocument(
     }
 
     return { document: updatedDoc, revision: nextRev };
-  });
+    });
+  } catch (err) {
+    if (isPgUniqueViolation(err)) {
+      throw new AppError(
+        409,
+        ERROR_CODES.HEAD_REVISION_CONFLICT,
+        'Document was modified concurrently; please retry.',
+      );
+    }
+    throw err;
+  }
 }
 
 export async function getDocumentWithHead(
