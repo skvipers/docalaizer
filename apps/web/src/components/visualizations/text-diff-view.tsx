@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useI18n } from '../i18n-provider';
 
 interface DiffLine {
   kind: 'same' | 'added' | 'removed';
@@ -68,6 +69,7 @@ export function TextDiffView({
   beforeText: string;
   afterText: string;
 }) {
+  const { t } = useI18n();
   const lines = useMemo(
     () => computeLineDiff(beforeText, afterText),
     [beforeText, afterText],
@@ -83,7 +85,7 @@ export function TextDiffView({
     >
       {lines.length === 0 ? (
         <div className="p-3" style={{ color: 'var(--text-muted)' }}>
-          Нет текстовых изменений.
+          {t('diff.noTextChanges')}
         </div>
       ) : (
         lines.map((line, idx) => {

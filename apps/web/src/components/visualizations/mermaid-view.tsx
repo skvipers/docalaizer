@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useId, useState } from 'react';
 import { AlertTriangle, Code2, Eye, Maximize2, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { useI18n } from '../i18n-provider';
 import { useTheme } from '../theme-provider';
 
 interface MermaidViewProps {
@@ -17,6 +18,7 @@ export const MermaidView = memo(function MermaidView({
   caption,
   compact = false,
 }: MermaidViewProps) {
+  const { t } = useI18n();
   const { theme } = useTheme();
   const uniqueId = useId().replace(/:/g, '_');
   const [svg, setSvg] = useState<string | null>(null);
@@ -88,7 +90,7 @@ export const MermaidView = memo(function MermaidView({
         }}
       >
         <span className="truncate font-medium" style={{ color: 'var(--text-primary)' }}>
-          {title ? `${title} · Mermaid` : 'Диаграмма Mermaid'}
+          {title ? `${title} · Mermaid` : t('viz.mermaidDefault')}
         </span>
         <div className="flex items-center gap-1.5">
           {svg && !showCode && (
@@ -98,11 +100,11 @@ export const MermaidView = memo(function MermaidView({
                 setZoom(1);
                 setFullscreen(true);
               }}
-              aria-label="Развернуть диаграмму"
+              aria-label={t('viz.expandDiagram')}
               className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
             >
               <Maximize2 className="h-3.5 w-3.5" />
-              Во весь экран
+              {t('viz.fullscreen')}
             </button>
           )}
           <button
@@ -111,7 +113,7 @@ export const MermaidView = memo(function MermaidView({
             className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
           >
             {showCode ? <Eye className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
-            {showCode ? 'Диаграмма' : 'Код'}
+            {showCode ? t('viz.diagram') : t('viz.code')}
           </button>
         </div>
       </div>
@@ -134,7 +136,7 @@ export const MermaidView = memo(function MermaidView({
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0">
-            <div className="font-semibold">Ошибка рендера Mermaid</div>
+            <div className="font-semibold">{t('viz.mermaidError')}</div>
             <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[11px]">
               {error}
             </pre>
@@ -148,7 +150,7 @@ export const MermaidView = memo(function MermaidView({
         />
       ) : (
         <div className="p-6 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-          Рендеринг диаграммы…
+          {t('viz.renderingDiagram')}
         </div>
       )}
 
@@ -168,7 +170,7 @@ export const MermaidView = memo(function MermaidView({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={title ? `${title} — просмотр диаграммы` : 'Просмотр диаграммы Mermaid'}
+          aria-label={title ? `${title} — ${t('viz.viewDiagramAria')}` : t('viz.viewDiagramAria')}
           className="fixed inset-0 z-50 flex flex-col p-4 sm:p-6"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.72)' }}
           onClick={(e) => {
@@ -190,13 +192,13 @@ export const MermaidView = memo(function MermaidView({
               }}
             >
               <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {title ? `${title} · Mermaid` : 'Диаграмма Mermaid'}
+                {title ? `${title} · Mermaid` : t('viz.mermaidDefault')}
               </span>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
-                  aria-label="Уменьшить"
+                  aria-label={t('viz.zoomOut')}
                   className="btn-secondary inline-flex items-center rounded p-1.5"
                 >
                   <ZoomOut className="h-3.5 w-3.5" />
@@ -207,7 +209,7 @@ export const MermaidView = memo(function MermaidView({
                 <button
                   type="button"
                   onClick={() => setZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))}
-                  aria-label="Увеличить"
+                  aria-label={t('viz.zoomIn')}
                   className="btn-secondary inline-flex items-center rounded p-1.5"
                 >
                   <ZoomIn className="h-3.5 w-3.5" />
@@ -215,7 +217,7 @@ export const MermaidView = memo(function MermaidView({
                 <button
                   type="button"
                   onClick={() => setZoom(1)}
-                  aria-label="Сбросить масштаб"
+                  aria-label={t('viz.resetZoom')}
                   className="btn-secondary inline-flex items-center rounded p-1.5"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -223,11 +225,11 @@ export const MermaidView = memo(function MermaidView({
                 <button
                   type="button"
                   onClick={() => setFullscreen(false)}
-                  aria-label="Закрыть полноэкранный просмотр"
+                  aria-label={t('viz.closeFullscreen')}
                   className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-1 text-xs"
                 >
                   <X className="h-3.5 w-3.5" />
-                  Закрыть
+                  {t('common.close')}
                 </button>
               </div>
             </div>

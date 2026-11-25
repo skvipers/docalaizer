@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
+import { useI18n } from '../i18n-provider';
 import {
   ENTITY_ICON_OPTIONS,
   normalizeDocumentIcon,
@@ -16,17 +17,18 @@ interface IconPickerProps {
 }
 
 export function IconPicker({ label, value, onChange, disabled = false }: IconPickerProps) {
+  const { locale, t } = useI18n();
   const searchId = useId();
   const [query, setQuery] = useState('');
   const filteredOptions = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase('ru');
+    const normalizedQuery = query.trim().toLocaleLowerCase(locale);
     if (!normalizedQuery) return ENTITY_ICON_OPTIONS;
     return ENTITY_ICON_OPTIONS.filter(
       ({ value: key, label: optionLabel }) =>
-        optionLabel.toLocaleLowerCase('ru').includes(normalizedQuery) ||
+        optionLabel.toLocaleLowerCase(locale).includes(normalizedQuery) ||
         key.includes(normalizedQuery),
     );
-  }, [query]);
+  }, [query, locale]);
   const normalizedValue = normalizeDocumentIcon(value);
 
   return (
@@ -46,8 +48,8 @@ export function IconPicker({ label, value, onChange, disabled = false }: IconPic
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Найти иконку…"
-          aria-label={`${label}: поиск`}
+          placeholder={t('iconPicker.searchPlaceholder')}
+          aria-label={`${label}: ${t('iconPicker.searchSuffix')}`}
           autoComplete="off"
           className="w-full rounded-md border py-2 pl-8 pr-3 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
           style={{
@@ -86,11 +88,11 @@ export function IconPicker({ label, value, onChange, disabled = false }: IconPic
           className="rounded-md border border-dashed px-3 py-4 text-center text-xs"
           style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
         >
-          Ничего не найдено. Попробуйте другой запрос.
+          {t('iconPicker.empty')}
         </p>
       )}
       <p className="mt-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-        {filteredOptions.length} из {ENTITY_ICON_OPTIONS.length}
+        {t('iconPicker.count', { shown: filteredOptions.length, total: ENTITY_ICON_OPTIONS.length })}
       </p>
     </fieldset>
   );

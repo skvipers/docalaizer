@@ -23,6 +23,7 @@ import {
   api,
 } from '@/lib/api';
 import { BlockContentView } from '../blocks/block-renderer';
+import { useI18n } from '../i18n-provider';
 import { TextDiffView } from '../visualizations/text-diff-view';
 
 interface InboxViewProps {
@@ -39,36 +40,28 @@ interface OpDecisionState {
   showBase: boolean;
 }
 
-const CONFLICT_BADGE: Record<
-  ConflictState,
-  { label: string; bg: string; text: string; border: string }
-> = {
+const CONFLICT_STYLE: Record<ConflictState, { bg: string; text: string; border: string }> = {
   clean: {
-    label: 'Чистая правка',
     bg: 'var(--sem-clean-bg)',
     text: 'var(--sem-clean-text)',
     border: 'var(--sem-clean-border)',
   },
   human_protected: {
-    label: 'Перезаписывает ручную правку',
     bg: 'var(--sem-human-bg)',
     text: 'var(--sem-human-text)',
     border: 'var(--sem-human-border)',
   },
   locked: {
-    label: 'Заблокирован замком',
     bg: 'var(--sem-danger-bg)',
     text: 'var(--sem-danger-text)',
     border: 'var(--sem-danger-border)',
   },
   stale_conflict: {
-    label: 'Параллельный конфликт',
     bg: 'var(--sem-danger-bg)',
     text: 'var(--sem-danger-text)',
     border: 'var(--sem-danger-border)',
   },
   risky_delete: {
-    label: 'Рискованное удаление / усечение',
     bg: 'var(--sem-danger-bg)',
     text: 'var(--sem-danger-text)',
     border: 'var(--sem-danger-border)',
@@ -103,6 +96,7 @@ function blockToComparableText(block: DocumentBlock | ProposalBlockPayload | nul
 function buildEditedPayload(
   op: ProposalDetailOpDto,
   editedText: string,
+  invalidVegaMessage: string,
 ): { ok: true; payload: ProposalBlockPayload } | { ok: false; error: string } {
   const template = op.row.newBlockPayload ?? op.headBlock;
   if (!template) {
@@ -147,7 +141,7 @@ function buildEditedPayload(
         },
       };
     } catch {
-      return { ok: false, error: 'Невалидный JSON спецификации Vega-Lite.' };
+      return { ok: false, error: invalidVegaMessage };
     }
   }
   if (template.type === 'callout') {
@@ -177,6 +171,7 @@ function buildEditedPayload(
 }
 
 export function InboxView({ projectId, onReviewed }: InboxViewProps) {
+  const { t } = useI18n();
   const [items, setItems] = useState<ProposalInboxItemDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ProposalDetailDto | null>(null);
@@ -200,11 +195,11 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
         setDetail(null);
       }
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Не удалось загрузить Inbox.');
+      setError(err instanceof ApiClientError ? err.message : t('inbox.loadError'));
     } finally {
       setLoadingList(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     void loadList();
@@ -243,7 +238,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof ApiClientError ? err.message : 'Ошибка загрузки Proposal.');
+          setError(err instanceof ApiClientError ? err.message : t('inbox.loadDetailError'));
         }
       })
       .finally(() => {
@@ -253,7 +248,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedId]);
+  }, [selectedId, t]);
 
   const updateDecision = (opId: string, patch: Partial<OpDecisionState>) => {
     setDecisions((prev) => {
@@ -285,16 +280,14 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
         state.decision === 'accepted' &&
         !state.forceStaleConfirmed
       ) {
-        setError(
-          `Операция #${i + 1}: подтвердите перезапись параллельного конфликта (галочка) или выберите «Поправить руками».`,
-        );
+        setError(t('inbox.confirmStaleError', { n: i + 1 }));
         return;
       }
 
       if (state.decision === 'edited') {
-        const built = buildEditedPayload(op, state.editedText);
+        const built = buildEditedPayload(op, state.editedText, t('inbox.invalidVegaJson'));
         if (!built.ok) {
-          setError(`Операция #${i + 1}: ${built.error}`);
+          setError(t('inbox.opError', { n: i + 1, error: built.error }));
           return;
         }
         payloadDecisions.push({
@@ -323,7 +316,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
       await loadList();
       onReviewed?.();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Не удалось применить ревью.');
+      setError(err instanceof ApiClientError ? err.message : t('inbox.applyError'));
     } finally {
       setSubmitting(false);
     }
@@ -332,10 +325,9 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Review Inbox</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('inbox.title')}</h1>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Поблочный аппрув предложений AI-агентов: визуальный и построчный diff, ручная доправка
-          конфликтов и жёсткая защита ручных блоков.
+          {t('inbox.subtitle')}
         </p>
       </div>
 
@@ -355,7 +347,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
 
       {loadingList ? (
         <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          Загрузка предложений…
+          {t('inbox.loading')}
         </div>
       ) : items.length === 0 ? (
         <div
@@ -366,15 +358,14 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
           }}
         >
           <CheckCircle2 className="mb-2 h-8 w-8" style={{ color: 'var(--sem-clean-text)' }} />
-          <div className="text-sm font-medium">Inbox пуст</div>
+          <div className="text-sm font-medium">{t('inbox.emptyTitle')}</div>
           <p className="mt-1 max-w-md text-xs" style={{ color: 'var(--text-secondary)' }}>
-            Все предложения AI-агентов обработаны. Когда агент пришлёт правки через MCP, они
-            появятся здесь.
+            {t('inbox.emptyHint')}
           </p>
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-          <aside className="space-y-2" aria-label="Список входящих Proposals">
+          <aside className="space-y-2" aria-label={t('inbox.listAria')}>
             {items.map((item) => {
               const active = item.proposal.id === selectedId;
               return (
@@ -415,7 +406,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                   color: 'var(--text-muted)',
                 }}
               >
-                Вычисление 3-way diff…
+                {t('inbox.computingDiff')}
               </div>
             ) : (
               <div className="space-y-4">
@@ -510,7 +501,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                         }}
                       >
                         <Eye className="h-3.5 w-3.5" />
-                        Только просмотр (Viewer)
+                        {t('inbox.viewerBadge')}
                       </span>
                     ) : (
                       <button
@@ -519,14 +510,15 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                         disabled={submitting}
                         className="btn-primary rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60"
                       >
-                        {submitting ? 'Применение…' : 'Применить ревью'}
+                        {submitting ? t('inbox.applying') : t('inbox.applyReview')}
                       </button>
                     )}
                   </div>
                 </div>
 
                 {detail.ops.map((op) => {
-                  const badge = CONFLICT_BADGE[op.liveConflictState];
+                  const badge = CONFLICT_STYLE[op.liveConflictState];
+                  const badgeLabel = t(`inbox.conflict.${op.liveConflictState}`);
                   const state = decisions[op.row.id];
                   if (!state) return null;
 
@@ -539,7 +531,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
 
                   const editedPreview =
                     state.decision === 'edited'
-                      ? buildEditedPayload(op, state.editedText)
+                      ? buildEditedPayload(op, state.editedText, t('inbox.invalidVegaJson'))
                       : null;
 
                   return (
@@ -578,7 +570,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                             ) : op.liveConflictState !== 'clean' ? (
                               <AlertTriangle className="h-3 w-3" />
                             ) : null}
-                            {badge.label}
+                            {badgeLabel}
                           </span>
 
                           {op.row.opType !== 'move' && (
@@ -594,12 +586,12 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                               {state.diffMode === 'visual' ? (
                                 <>
                                   <Code2 className="h-3 w-3" />
-                                  Построчный diff
+                                  {t('inbox.textDiff')}
                                 </>
                               ) : (
                                 <>
                                   <Eye className="h-3 w-3" />
-                                  Визуальный diff
+                                  {t('inbox.visualDiff')}
                                 </>
                               )}
                             </button>
@@ -628,7 +620,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                             }}
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
-                            Принять
+                            {t('inbox.accept')}
                           </button>
 
                           {canManualEdit && (
@@ -652,7 +644,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                               }}
                             >
                               <Pencil className="h-3.5 w-3.5" />
-                              Поправить руками
+                              {t('inbox.editManually')}
                             </button>
                           )}
 
@@ -677,7 +669,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                             }}
                           >
                             <XCircle className="h-3.5 w-3.5" />
-                            Отклонить
+                            {t('inbox.reject')}
                           </button>
                         </div>
                       </div>
@@ -695,8 +687,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
                             <div>
                               {op.reasons.join(' ')}
-                              {isLocked &&
-                                ' Снимите замок на странице документа, чтобы разрешить применение.'}
+                              {isLocked && t('inbox.unlockHint')}
                             </div>
                           </div>
                           {op.baseBlock && op.liveConflictState === 'stale_conflict' && (
@@ -707,7 +698,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                               }
                               className="underline underline-offset-2 font-medium"
                             >
-                              {state.showBase ? 'Скрыть Base' : 'Показать Base (3-way)'}
+                              {state.showBase ? t('inbox.hideBase') : t('inbox.showBase')}
                             </button>
                           )}
                         </div>
@@ -732,8 +723,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                                 })
                               }
                             />
-                            Я сравнил текущую версию (Head) с предложением AI и подтверждаю
-                            перезапись поверх параллельной правки
+                            {t('inbox.confirmStaleCheckbox')}
                           </label>
                         )}
 
@@ -749,7 +739,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                             className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide"
                             style={{ color: 'var(--text-muted)' }}
                           >
-                            Исходная версия (Base, которую читал AI)
+                            {t('inbox.baseVersion')}
                           </div>
                           <div
                             className="rounded-lg border p-3"
@@ -780,7 +770,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                                 className="text-[11px] font-semibold uppercase tracking-wide"
                                 style={{ color: 'var(--text-muted)' }}
                               >
-                                Текущая версия (Head)
+                                {t('inbox.headVersion')}
                               </div>
                               {op.headBlock ? (
                                 <div
@@ -797,7 +787,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                                     color: 'var(--text-muted)',
                                   }}
                                 >
-                                  Новый блок (отсутствует в текущей версии)
+                                  {t('inbox.newBlock')}
                                 </div>
                               )}
                             </div>
@@ -807,7 +797,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                                 className="text-[11px] font-semibold uppercase tracking-wide"
                                 style={{ color: 'var(--sem-ai-text)' }}
                               >
-                                Предложение AI
+                                {t('inbox.aiProposal')}
                               </div>
                               {op.row.opType === 'delete' ? (
                                 <div
@@ -818,7 +808,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                                     color: 'var(--sem-danger-text)',
                                   }}
                                 >
-                                  Блок будет удалён
+                                  {t('inbox.willDelete')}
                                 </div>
                               ) : op.row.newBlockPayload ? (
                                 <div
@@ -835,7 +825,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                                     color: 'var(--text-muted)',
                                   }}
                                 >
-                                  Перемещение блока
+                                  {t('inbox.blockMove')}
                                 </div>
                               )}
                             </div>
@@ -854,7 +844,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                               className="text-xs font-semibold"
                               style={{ color: 'var(--sem-human-text)' }}
                             >
-                              Ручная версия блока (будет сохранена с флагом humanTouched = true)
+                              {t('inbox.manualVersionTitle')}
                             </div>
                             <div className="grid gap-3 lg:grid-cols-2">
                               <textarea
@@ -863,7 +853,7 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                                   updateDecision(op.row.id, { editedText: e.target.value })
                                 }
                                 rows={8}
-                                aria-label="Ручная правка блока"
+                                aria-label={t('inbox.manualEditAria')}
                                 className="w-full rounded-md border p-2.5 font-mono text-xs leading-relaxed"
                                 style={{
                                   backgroundColor: 'var(--bg-surface)',
@@ -914,8 +904,8 @@ export function InboxView({ projectId, onReviewed }: InboxViewProps) {
                           onChange={(e) =>
                             updateDecision(op.row.id, { comment: e.target.value })
                           }
-                          aria-label="Комментарий агенту"
-                          placeholder="Комментарий агенту (агент увидит его через get_proposal)…"
+                          aria-label={t('inbox.commentAria')}
+                          placeholder={t('inbox.commentPlaceholder')}
                           className="w-full rounded-md border px-2.5 py-1.5 text-xs"
                           style={{
                             backgroundColor: 'var(--bg-surface)',

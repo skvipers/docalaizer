@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, Save, X, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
 import type { DocumentBlock, ProposalBlockPayload } from '@docalaizer/core';
+import { useI18n } from '../i18n-provider';
 import { MermaidView } from '../visualizations/mermaid-view';
 import { VegaChartView } from '../visualizations/vega-chart-view';
 import { IconButton } from '../ui/icon-button';
@@ -93,6 +94,7 @@ export function DocumentEditor({
   onSave,
   onCancel,
 }: DocumentEditorProps) {
+  const { t } = useI18n();
   const [title, setTitle] = useState(initialTitle);
   const [icon, setIcon] = useState<EntityIconKey>(() => normalizeDocumentIcon(initialIcon));
   const [summary, setSummary] = useState('');
@@ -122,7 +124,7 @@ export function DocumentEditor({
   };
 
   const handleCancelClick = () => {
-    if (isDirty && !window.confirm('Есть несохранённые изменения. Закрыть редактор без сохранения?')) {
+    if (isDirty && !window.confirm(t('editor.confirmCancel'))) {
       return;
     }
     onCancel();
@@ -134,13 +136,18 @@ export function DocumentEditor({
     const next: DraftBlock = {
       key,
       type,
-      title: type === 'diagram' ? 'Новая диаграмма' : type === 'chart' ? 'Новый график' : '',
+      title:
+        type === 'diagram'
+          ? t('editor.newDiagramTitle')
+          : type === 'chart'
+            ? t('editor.newChartTitle')
+            : '',
       markdownText:
         type === 'markdown'
-          ? '## Новый раздел\n\nТекст раздела…'
+          ? t('editor.newSectionTemplate')
           : type === 'table'
-            ? '| Колонка 1 | Колонка 2 |\n| --- | --- |\n| Значение 1 | Значение 2 |'
-            : 'Важное замечание…',
+            ? t('editor.newTableTemplate')
+            : t('editor.newCalloutTemplate'),
       mermaidSource: 'flowchart LR\n  Client --> API --> DB[(PostgreSQL)]',
       vegaJson: JSON.stringify(
         {
@@ -220,7 +227,7 @@ export function DocumentEditor({
             },
           });
         } catch {
-          setLocalError(`Блок #${i + 1} (Vega-Lite): некорректный JSON спецификации.`);
+          setLocalError(t('editor.invalidVegaJson', { n: i + 1 }));
           return;
         }
       } else if (d.type === 'callout') {
@@ -247,7 +254,7 @@ export function DocumentEditor({
       }
     }
 
-    await onSave(title.trim() || initialTitle, icon, payloads, summary.trim() || 'Ручная правка');
+    await onSave(title.trim() || initialTitle, icon, payloads, summary.trim() || t('editor.defaultSummary'));
   };
 
   return (
@@ -266,8 +273,8 @@ export function DocumentEditor({
             setIsDirty(true);
             setTitle(e.target.value);
           }}
-          placeholder="Заголовок страницы"
-          aria-label="Заголовок страницы"
+          placeholder={t('editor.pageTitlePlaceholder')}
+          aria-label={t('editor.pageTitleAria')}
           className="min-w-[200px] flex-1 bg-transparent text-lg font-semibold focus:outline-none"
           style={{ color: 'var(--text-primary)' }}
         />
@@ -279,8 +286,8 @@ export function DocumentEditor({
               setIsDirty(true);
               setSummary(e.target.value);
             }}
-            placeholder="Комментарий к ревизии…"
-            aria-label="Комментарий к ревизии"
+            placeholder={t('editor.summaryPlaceholder')}
+            aria-label={t('editor.summaryAria')}
             className="hidden w-52 rounded-md border px-2.5 py-1 text-xs sm:block"
             style={{
               backgroundColor: 'var(--bg-subtle)',
@@ -295,7 +302,7 @@ export function DocumentEditor({
             className="btn-secondary inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium"
           >
             <X className="h-3.5 w-3.5" />
-            Отмена
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -304,7 +311,7 @@ export function DocumentEditor({
             className="btn-primary inline-flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-medium disabled:opacity-60"
           >
             <Save className="h-3.5 w-3.5" />
-            {saving ? 'Сохранение…' : 'Сохранить'}
+            {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </div>
@@ -315,14 +322,14 @@ export function DocumentEditor({
       >
         <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-3 text-xs font-medium">
           <DocumentIcon icon={icon} className="h-4 w-4" />
-          <span>Иконка страницы</span>
+          <span>{t('editor.pageIcon')}</span>
           <span className="font-normal" style={{ color: 'var(--text-secondary)' }}>
             {getEntityIconLabel(icon)}
           </span>
         </summary>
         <div className="border-t p-3.5" style={{ borderColor: 'var(--border-default)' }}>
           <IconPicker
-            label="Выберите иконку страницы"
+            label={t('editor.choosePageIcon')}
             value={icon}
             disabled={saving}
             onChange={(value) => {
@@ -351,7 +358,7 @@ export function DocumentEditor({
               className="btn-secondary inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Загрузить свежую версию
+              {t('editor.reloadLatest')}
             </button>
           )}
         </div>
@@ -388,7 +395,7 @@ export function DocumentEditor({
                 <IconButton
                   onClick={() => moveBlock(idx, -1)}
                   disabled={idx === 0}
-                  label="Переместить блок вверх"
+                  label={t('editor.moveUp')}
                   style={{ color: 'var(--text-secondary)' }}
                 >
                   <ArrowUp className="h-4 w-4" strokeWidth={1.75} />
@@ -396,14 +403,14 @@ export function DocumentEditor({
                 <IconButton
                   onClick={() => moveBlock(idx, 1)}
                   disabled={idx === drafts.length - 1}
-                  label="Переместить блок вниз"
+                  label={t('editor.moveDown')}
                   style={{ color: 'var(--text-secondary)' }}
                 >
                   <ArrowDown className="h-4 w-4" strokeWidth={1.75} />
                 </IconButton>
                 <IconButton
                   onClick={() => removeBlock(idx)}
-                  label="Удалить блок"
+                  label={t('editor.deleteBlock')}
                   style={{ color: 'var(--sem-danger-text)' }}
                 >
                   <Trash2 className="h-4 w-4" strokeWidth={1.75} />
@@ -416,8 +423,8 @@ export function DocumentEditor({
                 type="text"
                 value={d.title}
                 onChange={(e) => updateDraft(idx, { title: e.target.value })}
-                placeholder="Название блока…"
-                aria-label={`Название блока ${idx + 1}`}
+                placeholder={t('editor.blockTitlePlaceholder')}
+                aria-label={t('editor.blockTitleAria', { n: idx + 1 })}
                 className="mb-2 w-full rounded-md border px-2.5 py-1.5 text-xs"
                 style={{
                   backgroundColor: 'var(--bg-subtle)',
@@ -431,7 +438,7 @@ export function DocumentEditor({
               <div className="space-y-2">
                 {d.type === 'callout' && (
                   <select
-                    aria-label={`Тип заметки ${idx + 1}`}
+                    aria-label={t('editor.calloutVariantAria', { n: idx + 1 })}
                     value={d.calloutVariant}
                     onChange={(e) =>
                       updateDraft(idx, {
@@ -452,7 +459,7 @@ export function DocumentEditor({
                   </select>
                 )}
                 <textarea
-                  aria-label={`Содержимое блока ${idx + 1}`}
+                  aria-label={t('editor.blockContentAria', { n: idx + 1 })}
                   value={d.markdownText}
                   onChange={(e) => updateDraft(idx, { markdownText: e.target.value })}
                   rows={Math.max(4, Math.min(14, d.markdownText.split('\n').length + 1))}
@@ -467,7 +474,7 @@ export function DocumentEditor({
             ) : d.type === 'diagram' ? (
               <div className="grid gap-3 lg:grid-cols-2">
                 <textarea
-                  aria-label={`Содержимое блока ${idx + 1}`}
+                  aria-label={t('editor.blockContentAria', { n: idx + 1 })}
                   value={d.mermaidSource}
                   onChange={(e) => updateDraft(idx, { mermaidSource: e.target.value })}
                   rows={8}
@@ -483,7 +490,7 @@ export function DocumentEditor({
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
                 <textarea
-                  aria-label={`Содержимое блока ${idx + 1}`}
+                  aria-label={t('editor.blockContentAria', { n: idx + 1 })}
                   value={d.vegaJson}
                   onChange={(e) => updateDraft(idx, { vegaJson: e.target.value })}
                   rows={10}
@@ -506,15 +513,15 @@ export function DocumentEditor({
         style={{ borderColor: 'var(--border-strong)' }}
       >
         <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-          Добавить блок:
+          {t('editor.addBlockLabel')}
         </span>
         {(
           [
-            ['markdown', 'Markdown'],
-            ['table', 'Таблица'],
-            ['diagram', 'Mermaid диаграмма'],
-            ['chart', 'Vega-Lite график'],
-            ['callout', 'Callout / ADR'],
+            ['markdown', t('editor.blockType.markdown')],
+            ['table', t('editor.blockType.table')],
+            ['diagram', t('editor.blockType.diagram')],
+            ['chart', t('editor.blockType.chart')],
+            ['callout', t('editor.blockType.callout')],
           ] as const
         ).map(([type, label]) => (
           <button
@@ -538,6 +545,7 @@ export function DocumentEditor({
 }
 
 function ChartLivePreview({ rawJson, title }: { rawJson: string; title?: string }) {
+  const { t } = useI18n();
   try {
     const parsed = JSON.parse(rawJson) as Record<string, unknown>;
     return <VegaChartView spec={parsed} title={title} compact />;
@@ -551,7 +559,7 @@ function ChartLivePreview({ rawJson, title }: { rawJson: string; title?: string 
           color: 'var(--sem-danger-text)',
         }}
       >
-        Невалидный JSON — исправьте синтаксис для предпросмотра.
+        {t('editor.invalidJsonPreview')}
       </div>
     );
   }

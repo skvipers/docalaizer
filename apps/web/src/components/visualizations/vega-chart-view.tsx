@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, BarChart3, Code2, Maximize2, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { useI18n } from '../i18n-provider';
 import { useTheme } from '../theme-provider';
 
 const DOCALAIZER_CHART_PALETTE = [
@@ -28,6 +29,7 @@ export const VegaChartView = memo(function VegaChartView({
   caption,
   compact = false,
 }: VegaChartViewProps) {
+  const { t } = useI18n();
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const modalContainerRef = useRef<HTMLDivElement | null>(null);
@@ -201,7 +203,7 @@ export const VegaChartView = memo(function VegaChartView({
         }}
       >
         <span className="truncate font-medium" style={{ color: 'var(--text-primary)' }}>
-          {title ? `${title} · Vega-Lite` : 'График Vega-Lite'}
+          {title ? `${title} · Vega-Lite` : t('viz.vegaDefault')}
         </span>
         <div className="flex items-center gap-1.5">
           {!showSpec && !error && (
@@ -211,11 +213,11 @@ export const VegaChartView = memo(function VegaChartView({
                 setZoom(1);
                 setFullscreen(true);
               }}
-              aria-label="Развернуть график"
+              aria-label={t('viz.expandChart')}
               className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
             >
               <Maximize2 className="h-3.5 w-3.5" />
-              Во весь экран
+              {t('viz.fullscreen')}
             </button>
           )}
           <button
@@ -224,7 +226,7 @@ export const VegaChartView = memo(function VegaChartView({
             className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
           >
             {showSpec ? <BarChart3 className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
-            {showSpec ? 'График' : 'Код'}
+            {showSpec ? t('viz.chart') : t('viz.code')}
           </button>
         </div>
       </div>
@@ -250,7 +252,7 @@ export const VegaChartView = memo(function VegaChartView({
             >
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0">
-                <div className="font-semibold">Ошибка рендера Vega-Lite</div>
+                <div className="font-semibold">{t('viz.vegaError')}</div>
                 <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[11px]">
                   {error}
                 </pre>
@@ -279,7 +281,7 @@ export const VegaChartView = memo(function VegaChartView({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={title ? `${title} — просмотр графика` : 'Просмотр графика Vega-Lite'}
+          aria-label={title ? `${title} — ${t('viz.viewChartAria')}` : t('viz.viewChartAria')}
           className="fixed inset-0 z-50 flex flex-col p-4 sm:p-6"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.72)' }}
           onClick={(e) => {
@@ -301,13 +303,13 @@ export const VegaChartView = memo(function VegaChartView({
               }}
             >
               <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {title ? `${title} · Vega-Lite` : 'График Vega-Lite'}
+                {title ? `${title} · Vega-Lite` : t('viz.vegaDefault')}
               </span>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
-                  aria-label="Уменьшить"
+                  aria-label={t('viz.zoomOut')}
                   className="btn-secondary inline-flex items-center rounded p-1.5"
                 >
                   <ZoomOut className="h-3.5 w-3.5" />
@@ -318,7 +320,7 @@ export const VegaChartView = memo(function VegaChartView({
                 <button
                   type="button"
                   onClick={() => setZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))}
-                  aria-label="Увеличить"
+                  aria-label={t('viz.zoomIn')}
                   className="btn-secondary inline-flex items-center rounded p-1.5"
                 >
                   <ZoomIn className="h-3.5 w-3.5" />
@@ -326,7 +328,7 @@ export const VegaChartView = memo(function VegaChartView({
                 <button
                   type="button"
                   onClick={() => setZoom(1)}
-                  aria-label="Сбросить масштаб"
+                  aria-label={t('viz.resetZoom')}
                   className="btn-secondary inline-flex items-center rounded p-1.5"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -334,11 +336,11 @@ export const VegaChartView = memo(function VegaChartView({
                 <button
                   type="button"
                   onClick={() => setFullscreen(false)}
-                  aria-label="Закрыть полноэкранный просмотр"
+                  aria-label={t('viz.closeFullscreen')}
                   className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-1 text-xs"
                 >
                   <X className="h-3.5 w-3.5" />
-                  Закрыть
+                  {t('common.close')}
                 </button>
               </div>
             </div>

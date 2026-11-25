@@ -5,6 +5,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import { Lock, Unlock, ShieldAlert, Bot, UserCheck, Info, AlertTriangle } from 'lucide-react';
 import type { DocumentBlock, ProposalBlockPayload } from '@docalaizer/core';
+import { useI18n } from '../i18n-provider';
 import { MermaidView } from '../visualizations/mermaid-view';
 import { VegaChartView } from '../visualizations/vega-chart-view';
 
@@ -169,6 +170,7 @@ export function DocumentBlockCard({
   onToggleLock,
   onReleaseToAi,
 }: DocumentBlockCardProps) {
+  const { t } = useI18n();
   const isLocked = block.meta.lockedByHuman;
   const isHuman = block.meta.humanTouched;
 
@@ -197,7 +199,7 @@ export function DocumentBlockCard({
               }}
             >
               <Lock className="h-3 w-3" />
-              Заблокирован от AI
+              {t('block.locked')}
             </span>
           ) : isHuman ? (
             <span
@@ -209,7 +211,7 @@ export function DocumentBlockCard({
               }}
             >
               <UserCheck className="h-3 w-3" />
-              Правлено вручную
+              {t('block.humanTouched')}
             </span>
           ) : (
             <span
@@ -221,7 +223,7 @@ export function DocumentBlockCard({
               }}
             >
               <Bot className="h-3 w-3" />
-              AI-блок
+              {t('block.aiBlock')}
             </span>
           )}
           <span
@@ -244,10 +246,10 @@ export function DocumentBlockCard({
                   border: '1px solid var(--border-default)',
                   color: 'var(--text-secondary)',
                 }}
-                title={isLocked ? 'Снять блокировку' : 'Заблокировать блок от правок AI'}
+                title={isLocked ? t('block.unlockTitle') : t('block.lockTitle')}
               >
                 {isLocked ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
-                {isLocked ? 'Разблокировать' : 'Замок'}
+                {isLocked ? t('block.unlock') : t('block.lock')}
               </button>
             )}
             {isHuman && !isLocked && onReleaseToAi && (
@@ -260,10 +262,10 @@ export function DocumentBlockCard({
                   border: '1px solid var(--border-default)',
                   color: 'var(--text-secondary)',
                 }}
-                title="Сбросить флаг humanTouched и разрешить AI обновлять блок"
+                title={t('block.releaseToAiTitle')}
               >
                 <Bot className="h-3 w-3" />
-                Передать AI
+                {t('block.releaseToAi')}
               </button>
             )}
           </div>

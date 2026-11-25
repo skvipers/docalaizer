@@ -45,6 +45,7 @@ import {
 } from '@/lib/api';
 import { BlockContentView, DocumentBlockCard } from '../blocks/block-renderer';
 import { DocumentEditor } from '../blocks/document-editor';
+import { useI18n } from '../i18n-provider';
 import { useTheme } from '../theme-provider';
 import { IconButton } from '../ui/icon-button';
 import { IconPicker } from '../ui/icon-picker';
@@ -95,6 +96,7 @@ function flattenTreeHierarchy(docs: DocumentTreeItemDto[]): FlatTreeRow[] {
 }
 
 export function WorkspaceShell() {
+  const { locale, toggleLocale, t } = useI18n();
   const { theme, toggleTheme } = useTheme();
   const projectSwitcherId = useId();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -162,7 +164,7 @@ export function WorkspaceShell() {
   const confirmDiscardChanges = () =>
     !editing ||
     !editorDirty ||
-    window.confirm('Есть несохранённые изменения. Продолжить без сохранения?');
+    window.confirm(t('ws.confirmDiscard'));
 
   const changeTab = (nextTab: ActiveTab) => {
     if (!confirmDiscardChanges()) return;
@@ -321,12 +323,12 @@ export function WorkspaceShell() {
       return true;
     } catch (err) {
       if (requestId !== docRequestRef.current) return false;
-      setDocError(err instanceof ApiClientError ? err.message : 'Ошибка загрузки страницы.');
+      setDocError(err instanceof ApiClientError ? err.message : t('ws.loadPageError'));
       return false;
     } finally {
       if (requestId === docRequestRef.current) setLoadingDoc(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (activeDocId) {
@@ -349,10 +351,10 @@ export function WorkspaceShell() {
       setSettingsError(null);
     } catch (err) {
       setSettingsError(
-        err instanceof ApiClientError ? err.message : 'Не удалось загрузить участников.',
+        err instanceof ApiClientError ? err.message : t('ws.loadMembersError'),
       );
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (activeTab === 'settings' && activeProjectId) {
@@ -381,7 +383,7 @@ export function WorkspaceShell() {
         .catch((err) => {
           if (cancelled) return;
           setSearchResults([]);
-          setSearchError(err instanceof ApiClientError ? err.message : 'Ошибка поиска.');
+          setSearchError(err instanceof ApiClientError ? err.message : t('ws.searchError'));
         })
         .finally(() => {
           if (!cancelled) setSearching(false);
@@ -392,7 +394,7 @@ export function WorkspaceShell() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchQuery, activeProjectId, user]);
+  }, [searchQuery, activeProjectId, user, t]);
 
   const activeProjectEntry = useMemo(
     () => projects.find((p) => p.project.id === activeProjectId) ?? null,
@@ -456,7 +458,7 @@ export function WorkspaceShell() {
       blocks: [
         {
           type: 'markdown',
-          content: 'Начните описывать архитектуру или добавьте диаграмму Mermaid / график Vega-Lite.',
+          content: t('ws.newPageInitialContent'),
         },
       ],
     });
@@ -495,7 +497,7 @@ export function WorkspaceShell() {
         setDocError(err.message);
         setIsConflictError(err.code === ERROR_CODES.HEAD_REVISION_CONFLICT);
       } else {
-        setDocError('Ошибка сохранения документа.');
+        setDocError(t('ws.saveDocError'));
       }
     } finally {
       setSavingDoc(false);
@@ -550,10 +552,10 @@ export function WorkspaceShell() {
         icon: projectIcon,
       });
       await loadProjects();
-      setSettingsSuccess('Название и иконка проекта сохранены.');
+      setSettingsSuccess(t('ws.saveProjectSuccess'));
     } catch (err) {
       setSettingsError(
-        err instanceof ApiClientError ? err.message : 'Не удалось сохранить настройки проекта.',
+        err instanceof ApiClientError ? err.message : t('ws.saveProjectError'),
       );
     } finally {
       setSavingProject(false);
@@ -579,7 +581,7 @@ export function WorkspaceShell() {
       await loadMembers(activeProjectId);
     } catch (err) {
       setSettingsError(
-        err instanceof ApiClientError ? err.message : 'Не удалось добавить участника.',
+        err instanceof ApiClientError ? err.message : t('ws.addMemberError'),
       );
     }
   };
@@ -608,7 +610,7 @@ export function WorkspaceShell() {
         className="flex min-h-screen items-center justify-center text-sm"
         style={{ color: 'var(--text-muted)' }}
       >
-        Загрузка Docalaizer…
+        {t('ws.loadingApp')}
       </div>
     );
   }
@@ -621,7 +623,7 @@ export function WorkspaceShell() {
 
   const renderSidebar = (isMobile: boolean) => (
     <aside
-      aria-label="Навигация по проектам и страницам"
+      aria-label={t('ws.navAria')}
       className="flex h-full w-64 shrink-0 flex-col border-r"
       style={{
         backgroundColor: 'var(--bg-subtle)',
@@ -643,9 +645,19 @@ export function WorkspaceShell() {
           <span>Docalaizer</span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={toggleLocale}
+            aria-label={t('common.switchLanguage')}
+            title={t('common.switchLanguage')}
+            className="rounded px-1.5 py-1 text-[11px] font-semibold uppercase transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {locale}
+          </button>
           <IconButton
             onClick={toggleTheme}
-            label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+            label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}
             style={{ color: 'var(--text-secondary)' }}
           >
             {theme === 'dark' ? (
@@ -657,7 +669,7 @@ export function WorkspaceShell() {
           <IconButton
             onClick={() => setMobileMenuOpen(false)}
             className="md:hidden"
-            label="Закрыть меню"
+            label={t('ws.closeMenu')}
             style={{ color: 'var(--text-secondary)' }}
           >
             <X className="h-4 w-4" strokeWidth={1.75} />
@@ -676,7 +688,7 @@ export function WorkspaceShell() {
               aria-haspopup="listbox"
               aria-expanded={projectSwitcherOpen}
               aria-controls={`${projectSwitcherId}-${isMobile ? 'mobile' : 'desktop'}`}
-              aria-label="Выбор проекта"
+              aria-label={t('ws.selectProjectAria')}
               onClick={() => setProjectSwitcherOpen((open) => !open)}
               onKeyDown={(event) => {
                 if (event.key !== 'ArrowDown') return;
@@ -692,7 +704,7 @@ export function WorkspaceShell() {
             >
               <ProjectIcon icon={activeProjectEntry?.project.icon} className="h-4 w-4 shrink-0" />
               <span className="min-w-0 flex-1 truncate">
-                {activeProjectEntry?.project.name ?? (projects.length > 0 ? 'Выберите проект' : 'Нет проектов')}
+                {activeProjectEntry?.project.name ?? (projects.length > 0 ? t('ws.selectProject') : t('ws.noProjects'))}
               </span>
               <ChevronDown
                 className={`h-4 w-4 shrink-0 transition-transform ${projectSwitcherOpen ? 'rotate-180' : ''}`}
@@ -704,7 +716,7 @@ export function WorkspaceShell() {
               <ul
                 id={`${projectSwitcherId}-${isMobile ? 'mobile' : 'desktop'}`}
                 role="listbox"
-                aria-label="Проекты"
+                aria-label={t('ws.projectsAria')}
                 className="absolute left-0 right-0 top-10 z-30 max-h-60 overflow-y-auto rounded-md border p-1 shadow-md"
                 style={{
                   backgroundColor: 'var(--bg-surface)',
@@ -767,7 +779,7 @@ export function WorkspaceShell() {
           <IconButton
             onClick={() => setCreatingProject((v) => !v)}
             className="btn-secondary"
-            label="Новый проект"
+            label={t('ws.newProject')}
           >
             <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
@@ -779,8 +791,8 @@ export function WorkspaceShell() {
               type="text"
               value={newProjName}
               onChange={(e) => setNewProjName(e.target.value)}
-              placeholder="Имя проекта…"
-              aria-label="Имя нового проекта"
+              placeholder={t('ws.newProjectPlaceholder')}
+              aria-label={t('ws.newProjectAria')}
               className="min-w-0 flex-1 rounded border px-2 py-1 text-xs"
               style={{
                 backgroundColor: 'var(--bg-surface)',
@@ -789,7 +801,7 @@ export function WorkspaceShell() {
               }}
             />
             <button type="submit" className="btn-primary rounded px-2 py-1 text-[13px] font-medium">
-              OK
+              {t('common.ok')}
             </button>
           </form>
         )}
@@ -805,8 +817,8 @@ export function WorkspaceShell() {
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Поиск… (Ctrl+K)"
-            aria-label="Поиск по документации"
+            placeholder={t('ws.searchPlaceholder')}
+            aria-label={t('ws.searchAria')}
             className="w-full rounded-md border py-1.5 pl-8 pr-2 text-[13px]"
             style={{
               backgroundColor: 'var(--bg-surface)',
@@ -824,7 +836,7 @@ export function WorkspaceShell() {
             >
               {searching ? (
                 <div role="status" className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Поиск…
+                  {t('ws.searching')}
                 </div>
               ) : searchError ? (
                 <div role="alert" className="px-3 py-2 text-xs" style={{ color: 'var(--sem-danger-text)' }}>
@@ -832,7 +844,7 @@ export function WorkspaceShell() {
                 </div>
               ) : searchResults.length === 0 ? (
                 <div role="status" className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Ничего не найдено.
+                  {t('ws.nothingFound')}
                 </div>
               ) : (
                 searchResults.map((r) => (
@@ -856,7 +868,7 @@ export function WorkspaceShell() {
 
       {/* Workspace Navigation */}
       <nav
-        aria-label="Разделы рабочего пространства"
+        aria-label={t('ws.sectionsAria')}
         className="space-y-0.5 border-b p-2 text-[13px]"
         style={{ borderColor: 'var(--border-default)' }}
       >
@@ -872,7 +884,7 @@ export function WorkspaceShell() {
         >
           <span className="flex items-center gap-2">
             <Inbox className="h-3.5 w-3.5" />
-            Review Inbox
+            {t('ws.reviewInbox')}
           </span>
           {totalPending > 0 && (
             <span
@@ -898,7 +910,7 @@ export function WorkspaceShell() {
           }}
         >
           <Bot className="h-3.5 w-3.5" />
-          AI-агенты и MCP
+          {t('ws.agentsAndMcp')}
         </button>
 
         {activeProjectEntry && (
@@ -914,7 +926,7 @@ export function WorkspaceShell() {
             }}
           >
             <Settings className="h-3.5 w-3.5" />
-            Настройки проекта
+            {t('ws.projectSettings')}
           </button>
         )}
       </nav>
@@ -926,12 +938,12 @@ export function WorkspaceShell() {
             className="text-[11px] font-semibold uppercase tracking-wide"
             style={{ color: 'var(--text-muted)' }}
           >
-            Страницы
+            {t('ws.pages')}
           </span>
           {canEdit && (
             <IconButton
               onClick={() => setCreatingDoc((v) => !v)}
-              label="Новая страница"
+              label={t('ws.newPage')}
               style={{ color: 'var(--text-secondary)' }}
             >
               <Plus className="h-4 w-4" strokeWidth={1.75} />
@@ -945,8 +957,8 @@ export function WorkspaceShell() {
               type="text"
               value={newDocTitle}
               onChange={(e) => setNewDocTitle(e.target.value)}
-              placeholder="Название страницы…"
-              aria-label="Название новой страницы"
+              placeholder={t('ws.newPagePlaceholder')}
+              aria-label={t('ws.newPageAria')}
               className="min-w-0 flex-1 rounded border px-2 py-1 text-xs"
               style={{
                 backgroundColor: 'var(--bg-surface)',
@@ -955,7 +967,7 @@ export function WorkspaceShell() {
               }}
             />
             <button type="submit" className="btn-primary rounded px-2 py-1 text-[13px] font-medium">
-              OK
+              {t('common.ok')}
             </button>
           </form>
         )}
@@ -1011,8 +1023,8 @@ export function WorkspaceShell() {
         </div>
         <IconButton
           onClick={() => void handleLogout()}
-          label="Выйти из аккаунта"
-          title="Выйти"
+          label={t('ws.logoutAria')}
+          title={t('ws.logout')}
           style={{ color: 'var(--text-secondary)' }}
         >
           <LogOut className="h-4 w-4" strokeWidth={1.75} />
@@ -1032,13 +1044,13 @@ export function WorkspaceShell() {
           ref={drawerRef}
           role="dialog"
           aria-modal="true"
-          aria-label="Навигация по рабочему пространству"
+          aria-label={t('ws.mobileNavAria')}
           className="fixed inset-0 z-40 flex md:hidden"
         >
           <div className="relative z-10 flex h-full">{renderSidebar(true)}</div>
           <button
             type="button"
-            aria-label="Закрыть навигацию"
+            aria-label={t('ws.closeNav')}
             onClick={() => setMobileMenuOpen(false)}
             className="flex-1 bg-black/45"
           />
@@ -1058,7 +1070,7 @@ export function WorkspaceShell() {
             <IconButton
               onClick={() => setMobileMenuOpen(true)}
               className="md:hidden"
-              label="Открыть навигацию"
+              label={t('ws.openNav')}
               style={{ color: 'var(--text-primary)' }}
             >
               <Menu className="h-4 w-4" strokeWidth={1.75} />
@@ -1093,7 +1105,7 @@ export function WorkspaceShell() {
                 className="btn-secondary inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs"
               >
                 <History className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">История</span>
+                <span className="hidden sm:inline">{t('ws.history')}</span>
               </button>
               {canEdit && (
                 <button
@@ -1105,7 +1117,7 @@ export function WorkspaceShell() {
                   className="btn-primary inline-flex items-center gap-1 rounded-md px-3 py-1 text-[13px] font-medium"
                 >
                   <Edit3 className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Редактировать</span>
+                  <span className="hidden sm:inline">{t('ws.edit')}</span>
                 </button>
               )}
             </div>
@@ -1130,7 +1142,7 @@ export function WorkspaceShell() {
           ) : activeTab === 'settings' && activeProjectEntry ? (
             <div className="mx-auto max-w-2xl space-y-6">
               <h1 className="text-2xl font-semibold">
-                Настройки проекта · {activeProjectEntry.project.name}
+                {t('ws.settingsTitle', { name: activeProjectEntry.project.name })}
               </h1>
 
               {settingsError && (
@@ -1180,9 +1192,9 @@ export function WorkspaceShell() {
                     <ProjectIcon icon={projectIcon} className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-semibold">Название и иконка</h2>
+                    <h2 className="text-sm font-semibold">{t('ws.nameAndIcon')}</h2>
                     <p className="mt-0.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      Эти настройки видны всем участникам проекта.
+                      {t('ws.visibleToAll')}
                     </p>
                   </div>
                 </div>
@@ -1193,7 +1205,7 @@ export function WorkspaceShell() {
                     className="mb-1.5 block text-xs font-medium"
                     style={{ color: 'var(--text-secondary)' }}
                   >
-                    Название проекта
+                    {t('ws.projectNameLabel')}
                   </label>
                   <input
                     id="project-name"
@@ -1216,7 +1228,7 @@ export function WorkspaceShell() {
                 </div>
 
                 <IconPicker
-                  label="Иконка проекта"
+                  label={t('ws.projectIconLabel')}
                   value={projectIcon}
                   disabled={activeProjectEntry.role !== 'owner' || savingProject}
                   onChange={(value) => {
@@ -1228,8 +1240,8 @@ export function WorkspaceShell() {
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                     {activeProjectEntry.role === 'owner'
-                      ? 'Slug проекта останется прежним.'
-                      : 'Изменять проект может только владелец.'}
+                      ? t('ws.slugUnchanged')
+                      : t('ws.ownerOnlyEdit')}
                   </p>
                   <button
                     type="submit"
@@ -1238,7 +1250,7 @@ export function WorkspaceShell() {
                     }
                     className="btn-primary shrink-0 rounded-md px-3.5 py-2 text-[13px] font-medium disabled:opacity-60"
                   >
-                    {savingProject ? 'Сохранение…' : 'Сохранить'}
+                    {savingProject ? t('common.saving') : t('common.save')}
                   </button>
                 </div>
               </form>
@@ -1250,10 +1262,11 @@ export function WorkspaceShell() {
                   borderColor: 'var(--border-default)',
                 }}
               >
-                <div className="text-sm font-medium">Политика аппрувов AI-правок</div>
+                <div className="text-sm font-medium">{t('ws.approvalPolicyTitle')}</div>
                 <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  Независимо от выбранного режима, блоки с флагом <code>humanTouched</code> или{' '}
-                  <code>lockedByHuman</code> никогда не перезаписываются AI без явного аппрува.
+                  {t('ws.approvalPolicyHintPrefix')} <code>humanTouched</code>{' '}
+                  {t('ws.approvalPolicyHintOr')} <code>lockedByHuman</code>{' '}
+                  {t('ws.approvalPolicyHintSuffix')}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {APPROVAL_POLICIES.map((pol) => {
@@ -1289,7 +1302,7 @@ export function WorkspaceShell() {
               >
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Users className="h-4 w-4" style={{ color: 'var(--accent-primary)' }} />
-                  Участники проекта ({members.length})
+                  {t('ws.membersTitle', { count: members.length })}
                 </div>
 
                 {activeProjectEntry.role === 'owner' && (
@@ -1299,8 +1312,8 @@ export function WorkspaceShell() {
                       required
                       value={inviteEmail}
                       onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="Email пользователя…"
-                      aria-label="Email участника"
+                      placeholder={t('ws.memberEmailPlaceholder')}
+                      aria-label={t('ws.memberEmailAria')}
                       className="min-w-[180px] flex-1 rounded-md border px-3 py-1.5 text-xs"
                       style={{
                         backgroundColor: 'var(--bg-subtle)',
@@ -1309,7 +1322,7 @@ export function WorkspaceShell() {
                       }}
                     />
                     <select
-                      aria-label="Роль участника"
+                      aria-label={t('ws.memberRoleAria')}
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value as ProjectRole)}
                       className="rounded-md border px-2.5 py-1.5 text-xs"
@@ -1330,7 +1343,7 @@ export function WorkspaceShell() {
                       className="btn-primary inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-[13px] font-medium"
                     >
                       <UserPlus className="h-3.5 w-3.5" />
-                      Добавить
+                      {t('common.add')}
                     </button>
                   </form>
                 )}
@@ -1352,7 +1365,7 @@ export function WorkspaceShell() {
                         {activeProjectEntry.role === 'owner' && m.userId !== user.id ? (
                           <>
                             <select
-                              aria-label={`Роль для ${m.email}`}
+                              aria-label={t('ws.memberRoleFor', { email: m.email })}
                               value={m.role}
                               onChange={(e) =>
                                 void handleChangeMemberRole(
@@ -1375,7 +1388,7 @@ export function WorkspaceShell() {
                             </select>
                             <IconButton
                               onClick={() => void handleRemoveMember(m.userId)}
-                              label={`Удалить ${m.email}`}
+                              label={t('ws.removeMember', { email: m.email })}
                               style={{ color: 'var(--sem-danger-text)' }}
                             >
                               <Trash2 className="h-4 w-4" strokeWidth={1.75} />
@@ -1416,7 +1429,7 @@ export function WorkspaceShell() {
                     onClick={() => void loadDoc(docDetail.document.id)}
                     className="btn-secondary rounded-md px-2.5 py-1 text-[13px] font-medium"
                   >
-                    Повторить
+                    {t('common.retry')}
                   </button>
                 </div>
               )}
@@ -1433,7 +1446,7 @@ export function WorkspaceShell() {
                       className="text-xs font-semibold uppercase tracking-wide"
                       style={{ color: 'var(--text-muted)' }}
                     >
-                      История ревизий (append-only)
+                      {t('ws.revisionHistory')}
                     </div>
                     <div className="flex flex-wrap gap-1 text-[11px]">
                       {(['all', 'human', 'ai', 'merge'] as const).map((f) => (
@@ -1451,7 +1464,7 @@ export function WorkspaceShell() {
                               historyFilter === f ? 'var(--accent-primary)' : 'var(--text-secondary)',
                           }}
                         >
-                          {f === 'all' ? 'Все' : f}
+                          {f === 'all' ? t('common.all') : f}
                         </button>
                       ))}
                     </div>
@@ -1480,7 +1493,7 @@ export function WorkspaceShell() {
                           >
                             {rev.authorType}
                           </span>
-                          <span className="truncate">{rev.summary ?? 'Без комментария'}</span>
+                          <span className="truncate">{rev.summary ?? t('ws.noComment')}</span>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           <button
@@ -1491,7 +1504,7 @@ export function WorkspaceShell() {
                             className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]"
                           >
                             <Eye className="h-3 w-3" />
-                            {previewRevision?.id === rev.id ? 'Скрыть' : 'Просмотр'}
+                            {previewRevision?.id === rev.id ? t('ws.hide') : t('ws.view')}
                           </button>
                           {canEdit && rev.id !== docDetail.headRevision?.id && (
                             <button
@@ -1500,7 +1513,7 @@ export function WorkspaceShell() {
                               className="btn-secondary inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]"
                             >
                               <RotateCcw className="h-3 w-3" />
-                              Откатить
+                              {t('ws.rollback')}
                             </button>
                           )}
                         </div>
@@ -1518,7 +1531,10 @@ export function WorkspaceShell() {
                     >
                       <div className="mb-3 flex items-center justify-between text-xs">
                         <span className="font-semibold">
-                          Снимок ревизии v{previewRevision.revisionNumber} ({previewRevision.authorType})
+                          {t('ws.revisionSnapshot', {
+                            num: previewRevision.revisionNumber,
+                            author: previewRevision.authorType,
+                          })}
                         </span>
                         <button
                           type="button"
@@ -1526,7 +1542,7 @@ export function WorkspaceShell() {
                           className="underline"
                           style={{ color: 'var(--text-secondary)' }}
                         >
-                          Закрыть
+                          {t('common.close')}
                         </button>
                       </div>
                       <div className="space-y-3">
@@ -1611,7 +1627,7 @@ export function WorkspaceShell() {
                 backgroundColor: 'var(--bg-surface)',
                 borderColor: 'var(--border-default)',
               }}
-              aria-label="Загрузка документа"
+              aria-label={t('ws.loadingDocAria')}
               aria-busy="true"
             >
               <div className="h-8 w-2/3 rounded-md" style={{ backgroundColor: 'var(--bg-subtle)' }} />
@@ -1629,7 +1645,7 @@ export function WorkspaceShell() {
                 color: 'var(--sem-danger-text)',
               }}
             >
-              <div className="text-sm font-medium">Не удалось загрузить страницу</div>
+              <div className="text-sm font-medium">{t('ws.failedLoadPage')}</div>
               <p className="mt-2 text-sm">{docError}</p>
               {activeDocId && (
                 <button
@@ -1637,7 +1653,7 @@ export function WorkspaceShell() {
                   onClick={() => void loadDoc(activeDocId)}
                   className="btn-secondary mt-4 rounded-md px-3 py-1.5 text-sm font-medium"
                 >
-                  Повторить загрузку
+                  {t('ws.retryLoad')}
                 </button>
               )}
             </div>
@@ -1650,9 +1666,9 @@ export function WorkspaceShell() {
               }}
             >
               <FileText className="mx-auto mb-3 h-8 w-8" style={{ color: 'var(--text-muted)' }} />
-              <div className="text-sm font-medium">Выберите или создайте страницу</div>
+              <div className="text-sm font-medium">{t('ws.emptyStateTitle')}</div>
               <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                Создайте первую страницу в сайдбаре слева или подключите AI-агента через MCP.
+                {t('ws.emptyStateHint')}
               </p>
             </div>
           )}

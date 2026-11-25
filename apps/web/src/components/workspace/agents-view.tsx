@@ -4,21 +4,15 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { Bot, Copy, Check, KeyRound, ShieldAlert, Ban } from 'lucide-react';
 import { AGENT_SCOPES, type AgentScope, type ProjectScopeMode } from '@docalaizer/shared';
 import { ProjectIcon } from '../ui/entity-icon';
+import { useI18n } from '../i18n-provider';
 import { type AgentDto, ApiClientError, type ProjectListItemDto, api } from '@/lib/api';
 
 interface AgentsViewProps {
   projects: ProjectListItemDto[];
 }
 
-const SCOPE_LABELS: Record<AgentScope, string> = {
-  'projects:read': 'Чтение проектов и дерева',
-  'projects:create': 'Создание новых проектов',
-  'docs:read': 'Чтение документов и истории',
-  'docs:create': 'Создание страниц',
-  'docs:propose': 'Отправка Proposals на ревью',
-};
-
 export function AgentsView({ projects }: AgentsViewProps) {
+  const { t } = useI18n();
   const [agents, setAgents] = useState<AgentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +41,11 @@ export function AgentsView({ projects }: AgentsViewProps) {
       setAgents(res.agents);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Не удалось загрузить агентов.');
+      setError(err instanceof ApiClientError ? err.message : t('agents.loadError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadAgents();
@@ -87,7 +81,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
       setDescription('');
       await loadAgents();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Ошибка создания токена.');
+      setError(err instanceof ApiClientError ? err.message : t('agents.createError'));
     } finally {
       setSubmitting(false);
     }
@@ -98,7 +92,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
       await api.revokeAgent(agentId);
       await loadAgents();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Не удалось отозвать токен.');
+      setError(err instanceof ApiClientError ? err.message : t('agents.revokeError'));
     }
   };
 
@@ -114,11 +108,10 @@ export function AgentsView({ projects }: AgentsViewProps) {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">AI-агенты и MCP-токены</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('agents.title')}</h1>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Подключайте Claude Code, Cursor, Codex, T3 Code и другие агенты к{' '}
-          <code className="font-mono text-xs">{mcpUrl}</code>. Токены хранятся в БД только как
-          SHA-256 хэш.
+          {t('agents.subtitlePrefix')}{' '}
+          <code className="font-mono text-xs">{mcpUrl}</code>. {t('agents.subtitleSuffix')}
         </p>
       </div>
 
@@ -133,7 +126,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--sem-clean-text)' }}>
               <KeyRound className="h-4 w-4" />
-              Токен создан — скопируйте его сейчас (повторно он не показывается)
+              {t('agents.tokenCreated')}
             </div>
             <button
               type="button"
@@ -146,7 +139,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
               }}
             >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              <span aria-live="polite">{copied ? 'Скопировано' : 'Копировать'}</span>
+              <span aria-live="polite">{copied ? t('agents.copied') : t('agents.copy')}</span>
             </button>
           </div>
           <pre
@@ -160,7 +153,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
             {createdToken}
           </pre>
           <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-            MCP Streamable HTTP: <code>{mcpUrl}</code> · Заголовок:{' '}
+            MCP Streamable HTTP: <code>{mcpUrl}</code> · {t('agents.headerLabel')}{' '}
             <code>Authorization: Bearer {createdToken.slice(0, 16)}…</code>
           </p>
         </div>
@@ -188,12 +181,12 @@ export function AgentsView({ projects }: AgentsViewProps) {
           borderColor: 'var(--border-default)',
         }}
       >
-        <h2 className="text-sm font-semibold">Выпустить новый токен агента</h2>
+        <h2 className="text-sm font-semibold">{t('agents.newTokenTitle')}</h2>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="agent-name" className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-              Название агента
+              {t('agents.nameLabel')}
             </label>
             <input
               id="agent-name"
@@ -201,7 +194,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Например: Claude Code — Laptop"
+              placeholder={t('agents.namePlaceholder')}
               className="w-full rounded-md border px-3 py-1.5 text-sm"
               style={{
                 backgroundColor: 'var(--bg-subtle)',
@@ -212,14 +205,14 @@ export function AgentsView({ projects }: AgentsViewProps) {
           </div>
           <div>
             <label htmlFor="agent-description" className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-              Описание (опционально)
+              {t('agents.descLabel')}
             </label>
             <input
               id="agent-description"
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Для ведения архитектуры и графиков"
+              placeholder={t('agents.descPlaceholder')}
               className="w-full rounded-md border px-3 py-1.5 text-sm"
               style={{
                 backgroundColor: 'var(--bg-subtle)',
@@ -232,7 +225,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
 
         <div>
           <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-            Права (Scopes)
+            {t('agents.scopesLabel')}
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {AGENT_SCOPES.map((scope) => {
@@ -263,7 +256,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
                         />
                       )}
                     </div>
-                    <div style={{ color: 'var(--text-secondary)' }}>{SCOPE_LABELS[scope]}</div>
+                    <div style={{ color: 'var(--text-secondary)' }}>{t(`agents.scope.${scope}`)}</div>
                   </div>
                 </label>
               );
@@ -273,7 +266,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
 
         <div className="space-y-2">
           <div className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-            Доступ к проектам
+            {t('agents.projectAccess')}
           </div>
           <div className="flex flex-wrap gap-3 text-xs">
             <label className="flex cursor-pointer items-center gap-1.5">
@@ -283,7 +276,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
                 checked={projectScopeMode === 'selected'}
                 onChange={() => setProjectScopeMode('selected')}
               />
-              Только выбранные проекты
+              {t('agents.selectedProjects')}
             </label>
             <label className="flex cursor-pointer items-center gap-1.5">
               <input
@@ -292,7 +285,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
                 checked={projectScopeMode === 'all_owner_projects'}
                 onChange={() => setProjectScopeMode('all_owner_projects')}
               />
-              Все мои проекты
+              {t('agents.allOwnerProjects')}
             </label>
           </div>
 
@@ -332,15 +325,15 @@ export function AgentsView({ projects }: AgentsViewProps) {
           }}
         >
           <Bot className="h-4 w-4" />
-          {submitting ? 'Выпуск…' : 'Создать токен агента'}
+          {submitting ? t('agents.issuing') : t('agents.createToken')}
         </button>
       </form>
 
       <div className="space-y-2.5">
-        <h2 className="text-sm font-semibold">Выпущенные агенты ({agents.length})</h2>
+        <h2 className="text-sm font-semibold">{t('agents.issuedList', { count: agents.length })}</h2>
         {loading ? (
           <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            Загрузка…
+            {t('common.loading')}
           </div>
         ) : agents.length === 0 ? (
           <div
@@ -351,7 +344,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
               color: 'var(--text-secondary)',
             }}
           >
-            Пока нет зарегистрированных AI-агентов.
+            {t('agents.empty')}
           </div>
         ) : (
           agents.map((a) => (
@@ -384,7 +377,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
                         color: 'var(--sem-danger-text)',
                       }}
                     >
-                      Отозван
+                      {t('agents.revoked')}
                     </span>
                   )}
                 </div>
@@ -419,7 +412,7 @@ export function AgentsView({ projects }: AgentsViewProps) {
                   }}
                 >
                   <Ban className="h-3.5 w-3.5" />
-                  Отозвать
+                  {t('agents.revoke')}
                 </button>
               )}
             </div>
